@@ -12,8 +12,11 @@ describe("skeleton", () => {
     expect(typeof wrap).toBe("function")
   })
 
-  it("wrap is not implemented yet", () => {
-    expect(() => wrap({})).toThrow(/not implemented/)
+  it("returns a client with create()", () => {
+    const client = wrap({
+      chatCompletionsCreate: async () => ({}),
+    })
+    expect(typeof client.create).toBe("function")
   })
 
   it("constructs JsonParseError with the raw payload", () => {

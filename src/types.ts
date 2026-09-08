@@ -3,6 +3,20 @@ import type { z } from "zod"
 /** Request encoding used to send the schema and read JSON back. */
 export type Mode = "TOOLS" | "JSON_SCHEMA" | "MD_JSON"
 
+/** Minimal chat-completions surface. Tests inject a fake; a live adapter comes later. */
+export type LLMClient = {
+  chatCompletionsCreate(kwargs: RequestKwargs): Promise<unknown>
+}
+
+/** Arguments passed to the LLM client. Modes add tools / response_format. */
+export type RequestKwargs = {
+  model: string
+  messages: Message[]
+  tools?: unknown
+  tool_choice?: unknown
+  response_format?: unknown
+}
+
 export type Message = {
   role: "system" | "user" | "assistant" | "tool"
   content: string | null

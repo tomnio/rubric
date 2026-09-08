@@ -14,6 +14,9 @@ export {
   SchemaValidationError,
 } from "./errors.ts"
 
+export { jsonSchemaFromZod } from "./schema.ts"
+export type { JsonSchema } from "./schema.ts"
+
 /**
  * Wrap an LLM client with schema-validated create().
  * The original client is not mutated.

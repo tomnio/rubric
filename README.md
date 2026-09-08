@@ -26,7 +26,7 @@ const user = await client.create({
 
 ## Status
 
-Skeleton only. `wrap()` is exported but not implemented.
+`wrap()` + TOOLS mode work against an `LLMClient` (inject a fake in tests). Reask and a live OpenAI adapter are not implemented yet.
 
 ```bash
 pnpm install

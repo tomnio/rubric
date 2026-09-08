@@ -26,7 +26,13 @@ const user = await client.create({
 
 ## Status
 
-Design only. No package, no runtime, no tests yet.
+Skeleton only. `wrap()` is exported but not implemented.
+
+```bash
+pnpm install
+pnpm typecheck
+pnpm test
+```
 
 ## License
 

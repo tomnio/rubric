@@ -1,0 +1,21 @@
+# Internal design specs (local only)
+/docs/
+
+# Dependencies and build
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Tests and logs
+coverage/
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

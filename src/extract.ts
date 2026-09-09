@@ -6,7 +6,7 @@ import {
 } from "./errors.ts"
 import { handlerFor } from "./modes/registry.ts"
 import { coerceParsedValue } from "./schema.ts"
-import type { CreateParams, LLMClient, Mode } from "./types.ts"
+import type { CreateParams, Hooks, LLMClient, Mode, WrapOptions } from "./types.ts"
 
 const DEFAULT_MAX_RETRIES = 3
 const DEFAULT_MODE: Mode = "TOOLS"
@@ -14,10 +14,11 @@ const DEFAULT_MODE: Mode = "TOOLS"
 export async function extract<T extends z.ZodType>(
   client: LLMClient,
   params: CreateParams<T>,
-  defaults?: { mode?: Mode; maxRetries?: number },
+  defaults?: WrapOptions,
 ): Promise<z.infer<T>> {
   const mode = params.mode ?? defaults?.mode ?? DEFAULT_MODE
   const maxRetries = params.maxRetries ?? defaults?.maxRetries ?? DEFAULT_MAX_RETRIES
+  const hooks: Hooks = { ...defaults?.hooks, ...params.hooks }
   const attemptsAllowed = maxRetries + 1
   const handler = handlerFor(mode)
   let kwargs = handler.prepareRequest(params.schema, {
@@ -29,6 +30,7 @@ export async function extract<T extends z.ZodType>(
 
   while (attempts < attemptsAllowed) {
     attempts += 1
+    hooks.onRequest?.(kwargs)
     const raw = await client.chatCompletionsCreate(kwargs)
 
     try {
@@ -41,12 +43,14 @@ export async function extract<T extends z.ZodType>(
           parsed.error.issues,
         )
       }
+      hooks.onSuccess?.(parsed.data)
       return parsed.data
     } catch (err) {
       if (!(err instanceof JsonParseError || err instanceof SchemaValidationError)) {
         throw err
       }
       lastError = err
+      hooks.onParseError?.(err)
       if (attempts >= attemptsAllowed) {
         break
       }

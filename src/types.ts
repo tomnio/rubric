@@ -1,4 +1,5 @@
 import type { z } from "zod"
+import type { JsonParseError, SchemaValidationError } from "./errors.ts"
 
 /** Request encoding used to send the schema and read JSON back. */
 export type Mode = "TOOLS" | "JSON_SCHEMA" | "MD_JSON"
@@ -33,11 +34,18 @@ export type Message = {
   tool_calls?: ToolCall[]
 }
 
+export type Hooks = {
+  onRequest?: (kwargs: RequestKwargs) => void
+  onParseError?: (error: JsonParseError | SchemaValidationError) => void
+  onSuccess?: (value: unknown) => void
+}
+
 export type WrapOptions = {
   /** Default mode for create(). Default: "TOOLS" */
   mode?: Mode
   /** Extra attempts after the first. Default: 3 */
   maxRetries?: number
+  hooks?: Hooks
 }
 
 export type CreateParams<T extends z.ZodType> = {
@@ -46,6 +54,7 @@ export type CreateParams<T extends z.ZodType> = {
   schema: T
   maxRetries?: number
   mode?: Mode
+  hooks?: Hooks
 }
 
 export type RubricClient = {

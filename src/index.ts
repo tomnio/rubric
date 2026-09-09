@@ -9,6 +9,7 @@ import type { LLMClient, RubricClient, WrapOptions } from "./types.ts"
 
 export type {
   CreateParams,
+  Hooks,
   LLMClient,
   Message,
   Mode,

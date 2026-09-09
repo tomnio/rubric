@@ -1,6 +1,6 @@
 import type { ZodIssue } from "zod"
 
-/** Short error text attached to the next LLM request. */
+/** Short error text attached to the next LLM request, including refine issues. */
 export function formatError(
   error: JsonParseError | SchemaValidationError,
 ): string {

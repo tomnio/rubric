@@ -33,6 +33,7 @@ export async function extract<T extends z.ZodType>(
 
     try {
       const json = coerceParsedValue(params.schema, handler.parseResponse(raw))
+      // Includes .refine() / .superRefine(); those issues go into reask text.
       const parsed = params.schema.safeParse(json)
       if (!parsed.success) {
         throw new SchemaValidationError(

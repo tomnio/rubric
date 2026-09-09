@@ -10,11 +10,13 @@ import {
   type OpenAIChatClient,
 } from "./adapters/openai.ts"
 import { extract } from "./extract.ts"
+import { extractPartial } from "./partial.ts"
 import type { LLMClient, RubricClient, WrapOptions } from "./types.ts"
 
 export type {
   ContentBlock,
   CreateParams,
+  DeepPartial,
   Hooks,
   LLMClient,
   Message,
@@ -32,7 +34,12 @@ export {
   SchemaValidationError,
 } from "./errors.ts"
 
-export { coerceParsedValue, jsonSchemaFromZod, llmJsonSchemaFromZod } from "./schema.ts"
+export {
+  coerceParsedValue,
+  deepPartialZod,
+  jsonSchemaFromZod,
+  llmJsonSchemaFromZod,
+} from "./schema.ts"
 export type { JsonSchema } from "./schema.ts"
 export type { OpenAIChatClient } from "./adapters/openai.ts"
 export type { AnthropicMessagesClient } from "./adapters/anthropic.ts"
@@ -65,6 +72,9 @@ export function wrap(
   return {
     create(params) {
       return extract(llm, params, defaults)
+    },
+    createPartial(params) {
+      return extractPartial(llm, params, defaults)
     },
   }
 }

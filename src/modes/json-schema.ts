@@ -5,6 +5,7 @@ import type { RequestKwargs } from "../types.ts"
 import {
   choiceMessage,
   EXTRACT_NAME,
+  openaiContentDelta,
   parseJsonText,
   reaskWithUserMessage,
 } from "./helpers.ts"
@@ -39,5 +40,9 @@ export const jsonSchemaHandler: ModeHandler = {
     error: JsonParseError | SchemaValidationError,
   ): RequestKwargs {
     return reaskWithUserMessage(kwargs, raw, error)
+  },
+
+  deltaFromChunk(raw: unknown): string {
+    return openaiContentDelta(raw)
   },
 }

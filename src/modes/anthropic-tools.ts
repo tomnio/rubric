@@ -139,4 +139,8 @@ export const anthropicToolsHandler: ModeHandler = {
       messages: [...kwargs.messages, assistant, followUp],
     }
   },
+
+  deltaFromChunk(): string {
+    return ""
+  },
 }

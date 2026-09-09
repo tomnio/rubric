@@ -36,5 +36,8 @@
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
     "zod": "^3.24.0"
+  },
+  "dependencies": {
+    "partial-json": "^0.1.7"
   }
 }

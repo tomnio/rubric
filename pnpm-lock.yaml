@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      partial-json:
+        specifier: ^0.1.7
+        version: 0.1.7
     devDependencies:
       openai:
         specifier: ^4.104.0
@@ -574,6 +578,9 @@ packages:
         optional: true
       zod:
         optional: true
+
+  partial-json@0.1.7:
+    resolution: {integrity: sha512-Njv/59hHaokb/hRUjce3Hdv12wd60MtM9Z5Olmn+nehe0QDAsRtRbJPvJ0Z91TusF0SuZRIvnM+S4l6EIP8leA==}
 
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
@@ -1161,6 +1168,8 @@ snapshots:
       zod: 3.25.76
     transitivePeerDependencies:
       - encoding
+
+  partial-json@0.1.7: {}
 
   pathe@2.0.3: {}
 

@@ -2,7 +2,12 @@ import type { ZodTypeAny } from "zod"
 import { JsonParseError, type SchemaValidationError } from "../errors.ts"
 import { jsonSchemaFromZod } from "../schema.ts"
 import type { RequestKwargs } from "../types.ts"
-import { choiceMessage, parseJsonText, reaskWithUserMessage } from "./helpers.ts"
+import {
+  choiceMessage,
+  openaiContentDelta,
+  parseJsonText,
+  reaskWithUserMessage,
+} from "./helpers.ts"
 import type { ModeHandler } from "./types.ts"
 
 const FENCE = /```(?:json)?\s*([\s\S]*?)```/i
@@ -56,5 +61,9 @@ export const mdJsonHandler: ModeHandler = {
     error: JsonParseError | SchemaValidationError,
   ): RequestKwargs {
     return reaskWithUserMessage(kwargs, raw, error)
+  },
+
+  deltaFromChunk(raw: unknown): string {
+    return openaiContentDelta(raw)
   },
 }

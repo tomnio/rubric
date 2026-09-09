@@ -7,6 +7,7 @@ export type Mode = "TOOLS" | "JSON_SCHEMA" | "MD_JSON" | "ANTHROPIC_TOOLS"
 /** Minimal chat-completions surface. Tests inject a fake; a live adapter comes later. */
 export type LLMClient = {
   chatCompletionsCreate(kwargs: RequestKwargs): Promise<unknown>
+  chatCompletionsStream?: (kwargs: RequestKwargs) => AsyncIterable<unknown>
 }
 
 /** Arguments passed to the LLM client. Modes add tools / response_format. */
@@ -18,6 +19,7 @@ export type RequestKwargs = {
   response_format?: unknown
   max_tokens?: number
   system?: string
+  stream?: boolean
 }
 
 export type ToolCall = {
@@ -69,6 +71,15 @@ export type CreateParams<T extends z.ZodType> = {
   hooks?: Hooks
 }
 
+export type DeepPartial<T> = T extends (infer U)[]
+  ? DeepPartial<U>[]
+  : T extends object
+    ? { [K in keyof T]?: DeepPartial<T[K]> }
+    : T
+
 export type RubricClient = {
   create<T extends z.ZodType>(params: CreateParams<T>): Promise<z.infer<T>>
+  createPartial<T extends z.ZodType>(
+    params: CreateParams<T>,
+  ): AsyncIterable<DeepPartial<z.infer<T>>>
 }

@@ -153,6 +153,26 @@ function isRootArray(schema: ZodTypeAny): boolean {
   return def(unwrap(schema).inner).typeName === "ZodArray"
 }
 
+/** All object fields optional, recursively. Used to hydrate streaming snapshots. */
+export function deepPartialZod(schema: ZodTypeAny): ZodTypeAny {
+  const { inner } = unwrap(schema)
+  const typeName = def(inner).typeName
+  if (typeName === "ZodObject") {
+    const shape: z.ZodRawShape = {}
+    for (const [key, field] of Object.entries(
+      (inner as z.ZodObject<z.ZodRawShape>).shape,
+    )) {
+      shape[key] = deepPartialZod(field).optional()
+    }
+    return z.object(shape)
+  }
+  if (typeName === "ZodArray") {
+    const element = def(inner).type as ZodTypeAny
+    return z.array(deepPartialZod(element))
+  }
+  return inner
+}
+
 function convertObject(schema: z.ZodObject<z.ZodRawShape>): JsonSchema {
   const properties: Record<string, JsonSchema> = {}
   const required: string[] = []

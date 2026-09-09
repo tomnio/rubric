@@ -38,5 +38,19 @@ export function fromOpenAI(client: OpenAIChatClient): LLMClient {
     chatCompletionsCreate(kwargs: RequestKwargs) {
       return client.chat.completions.create(kwargs)
     },
+    async *chatCompletionsStream(kwargs: RequestKwargs) {
+      const result = await Promise.resolve(
+        client.chat.completions.create({ ...kwargs, stream: true }),
+      )
+      if (
+        result !== null &&
+        typeof result === "object" &&
+        Symbol.asyncIterator in result
+      ) {
+        yield* result as AsyncIterable<unknown>
+        return
+      }
+      throw new Error("OpenAI stream did not return an async iterable")
+    },
   }
 }

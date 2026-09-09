@@ -26,7 +26,7 @@ const user = await client.create({
 
 ## Status
 
-`wrap()` + TOOLS mode work against an `LLMClient` (inject a fake in tests). Reask and a live OpenAI adapter are not implemented yet.
+`wrap()` + TOOLS mode work against an `LLMClient` (inject a fake in tests). Parse and validation failures reask until `maxRetries` is exhausted. A live OpenAI adapter is not implemented yet.
 
 ```bash
 pnpm install

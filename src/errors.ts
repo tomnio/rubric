@@ -1,5 +1,26 @@
 import type { ZodIssue } from "zod"
 
+/** Short error text attached to the next LLM request. */
+export function formatError(
+  error: JsonParseError | SchemaValidationError,
+): string {
+  if (error instanceof SchemaValidationError) {
+    const lines = error.issues.map((issue) => {
+      const path = issue.path.length > 0 ? issue.path.join(".") : "(root)"
+      return `- ${path}: ${issue.message}`
+    })
+    return [
+      "The previous output failed schema validation:",
+      ...lines,
+      "Fix the JSON and try again.",
+    ].join("\n")
+  }
+  return [
+    "The previous output was not valid JSON.",
+    "Return a single JSON object that matches the schema.",
+  ].join("\n")
+}
+
 /** Thrown when the model response has no JSON, or JSON.parse fails. */
 export class JsonParseError extends Error {
   readonly raw: unknown

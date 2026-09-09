@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { z } from "zod"
 import {
   JsonParseError,
+  RetryExhaustedError,
   SchemaValidationError,
   wrap,
   type LLMClient,
@@ -86,26 +87,33 @@ describe("TOOLS mode", () => {
     })
   })
 
-  it("throws JsonParseError when tool_calls are missing", async () => {
+  it("throws RetryExhaustedError when tool_calls are missing and retries are 0", async () => {
     const client = wrap(fakeClient({ choices: [{ message: { content: "hello" } }] }))
-    await expect(
-      client.create({
+    const err = await client
+      .create({
         model: "test-model",
         schema: User,
         messages: [{ role: "user", content: "John is 25 years old" }],
-      }),
-    ).rejects.toBeInstanceOf(JsonParseError)
+        maxRetries: 0,
+      })
+      .catch((caught: unknown) => caught)
+    expect(err).toBeInstanceOf(RetryExhaustedError)
+    expect((err as RetryExhaustedError).attempts).toBe(1)
+    expect((err as RetryExhaustedError).lastError).toBeInstanceOf(JsonParseError)
   })
 
-  it("throws SchemaValidationError when JSON does not match the schema", async () => {
+  it("throws RetryExhaustedError when JSON does not match and retries are 0", async () => {
     const client = wrap(fakeClient(toolResponse({ name: "John", age: "twenty-five" })))
-    await expect(
-      client.create({
+    const err = await client
+      .create({
         model: "test-model",
         schema: User,
         messages: [{ role: "user", content: "John is 25 years old" }],
-      }),
-    ).rejects.toBeInstanceOf(SchemaValidationError)
+        maxRetries: 0,
+      })
+      .catch((caught: unknown) => caught)
+    expect(err).toBeInstanceOf(RetryExhaustedError)
+    expect((err as RetryExhaustedError).lastError).toBeInstanceOf(SchemaValidationError)
   })
 
   it("does not mutate the original messages array", () => {

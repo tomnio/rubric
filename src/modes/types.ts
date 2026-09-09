@@ -11,4 +11,6 @@ export type ModeHandler = {
     raw: unknown,
     error: JsonParseError | SchemaValidationError,
   ): RequestKwargs
+  /** Text delta from a streaming chunk. Empty string if this chunk has none. */
+  deltaFromChunk(raw: unknown): string
 }

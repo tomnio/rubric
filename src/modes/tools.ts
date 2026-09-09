@@ -11,6 +11,7 @@ import {
   assistantMessageFromRaw,
   choiceMessage,
   EXTRACT_NAME,
+  openaiToolArgsDelta,
   parseJsonText,
   readToolCalls,
 } from "./helpers.ts"
@@ -68,5 +69,9 @@ export const toolsHandler: ModeHandler = {
       ...kwargs,
       messages: [...kwargs.messages, assistant, followUp],
     }
+  },
+
+  deltaFromChunk(raw: unknown): string {
+    return openaiToolArgsDelta(raw)
   },
 }

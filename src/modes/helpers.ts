@@ -10,6 +10,26 @@ export function asRecord(value: unknown): Record<string, unknown> | undefined {
   return undefined
 }
 
+export function choiceDelta(raw: unknown): Record<string, unknown> | undefined {
+  const root = asRecord(raw)
+  const choices = root?.["choices"]
+  const choice = Array.isArray(choices) ? asRecord(choices[0]) : undefined
+  return asRecord(choice?.["delta"])
+}
+
+export function openaiContentDelta(raw: unknown): string {
+  const content = choiceDelta(raw)?.["content"]
+  return typeof content === "string" ? content : ""
+}
+
+export function openaiToolArgsDelta(raw: unknown): string {
+  const delta = choiceDelta(raw)
+  const toolCalls = delta?.["tool_calls"]
+  const call = Array.isArray(toolCalls) ? asRecord(toolCalls[0]) : undefined
+  const args = asRecord(call?.["function"])?.["arguments"]
+  return typeof args === "string" ? args : ""
+}
+
 export function choiceMessage(raw: unknown): Record<string, unknown> | undefined {
   const root = asRecord(raw)
   const choices = root?.["choices"]

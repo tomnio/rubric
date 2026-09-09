@@ -2,7 +2,7 @@ import type { z } from "zod"
 import type { JsonParseError, SchemaValidationError } from "./errors.ts"
 
 /** Request encoding used to send the schema and read JSON back. */
-export type Mode = "TOOLS" | "JSON_SCHEMA" | "MD_JSON"
+export type Mode = "TOOLS" | "JSON_SCHEMA" | "MD_JSON" | "ANTHROPIC_TOOLS"
 
 /** Minimal chat-completions surface. Tests inject a fake; a live adapter comes later. */
 export type LLMClient = {
@@ -16,6 +16,8 @@ export type RequestKwargs = {
   tools?: unknown
   tool_choice?: unknown
   response_format?: unknown
+  max_tokens?: number
+  system?: string
 }
 
 export type ToolCall = {
@@ -27,9 +29,19 @@ export type ToolCall = {
   }
 }
 
+export type ContentBlock =
+  | { type: "text"; text: string }
+  | { type: "tool_use"; id: string; name: string; input: unknown }
+  | {
+      type: "tool_result"
+      tool_use_id: string
+      content: string
+      is_error?: boolean
+    }
+
 export type Message = {
   role: "system" | "user" | "assistant" | "tool"
-  content: string | null
+  content: string | null | ContentBlock[]
   tool_call_id?: string
   tool_calls?: ToolCall[]
 }

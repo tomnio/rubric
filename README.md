@@ -26,7 +26,7 @@ const user = await client.create({
 
 ## Status
 
-v0: `wrap()` accepts a fake `LLMClient` or an OpenAI `chat.completions` client. Modes: `TOOLS`, `JSON_SCHEMA`, `MD_JSON`. Failed parses reask until `maxRetries` is exhausted.
+`wrap()` accepts a fake `LLMClient`, OpenAI `chat.completions`, or Anthropic `messages`. Modes: `TOOLS`, `JSON_SCHEMA`, `MD_JSON`, `ANTHROPIC_TOOLS`. Failed parses reask until `maxRetries` is exhausted.
 
 ```bash
 pnpm install

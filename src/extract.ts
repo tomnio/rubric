@@ -5,6 +5,7 @@ import {
   SchemaValidationError,
 } from "./errors.ts"
 import { handlerFor } from "./modes/registry.ts"
+import { coerceParsedValue } from "./schema.ts"
 import type { CreateParams, LLMClient, Mode } from "./types.ts"
 
 const DEFAULT_MAX_RETRIES = 3
@@ -31,7 +32,7 @@ export async function extract<T extends z.ZodType>(
     const raw = await client.chatCompletionsCreate(kwargs)
 
     try {
-      const json = handler.parseResponse(raw)
+      const json = coerceParsedValue(params.schema, handler.parseResponse(raw))
       const parsed = params.schema.safeParse(json)
       if (!parsed.success) {
         throw new SchemaValidationError(

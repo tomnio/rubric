@@ -10,10 +10,10 @@ const FENCE = /```(?:json)?\s*([\s\S]*?)```/i
 function instruction(schema: ZodTypeAny): string {
   const jsonSchema = JSON.stringify(jsonSchemaFromZod(schema), null, 2)
   return [
-    "Reply with only a JSON object inside a markdown fence:",
+    "Reply with only JSON inside a markdown fence:",
     "",
     "```json",
-    "{ ... }",
+    "...",
     "```",
     "",
     "The JSON must match this schema:",

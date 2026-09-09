@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
-import { jsonSchemaFromZod } from "../src/schema.ts"
+import { jsonSchemaFromZod, llmJsonSchemaFromZod } from "../src/schema.ts"
 
 describe("jsonSchemaFromZod", () => {
   it("converts a flat object with string and int", () => {
@@ -91,8 +91,64 @@ describe("jsonSchemaFromZod", () => {
     })
   })
 
+  it("converts arrays of primitives and objects", () => {
+    expect(jsonSchemaFromZod(z.array(z.string()))).toEqual({
+      type: "array",
+      items: { type: "string" },
+    })
+
+    const Users = z.array(
+      z.object({
+        name: z.string(),
+        age: z.number().int(),
+      }),
+    )
+    expect(jsonSchemaFromZod(Users)).toEqual({
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          name: { type: "string" },
+          age: { type: "integer" },
+        },
+        required: ["name", "age"],
+      },
+    })
+  })
+
+  it("converts nested and optional arrays on objects", () => {
+    const Model = z.object({
+      tags: z.array(z.string()),
+      groups: z.array(z.array(z.number())).optional(),
+    })
+    const schema = jsonSchemaFromZod(Model)
+    expect(schema.properties?.["tags"]).toEqual({
+      type: "array",
+      items: { type: "string" },
+    })
+    expect(schema.properties?.["groups"]).toEqual({
+      type: "array",
+      items: { type: "array", items: { type: "number" } },
+    })
+    expect(schema.required).toEqual(["tags"])
+  })
+
+  it("wraps a root array as { items } for LLM object roots", () => {
+    expect(llmJsonSchemaFromZod(z.array(z.string()))).toEqual({
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        items: { type: "array", items: { type: "string" } },
+      },
+      required: ["items"],
+    })
+  })
+
   it("throws on unsupported Zod types", () => {
     expect(() => jsonSchemaFromZod(z.date())).toThrow(/Unsupported Zod type/)
-    expect(() => jsonSchemaFromZod(z.array(z.string()))).toThrow(/Unsupported Zod type/)
+    expect(() => jsonSchemaFromZod(z.map(z.string(), z.string()))).toThrow(
+      /Unsupported Zod type/,
+    )
   })
 })

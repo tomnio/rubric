@@ -4,7 +4,7 @@ import {
   JsonParseError,
   type SchemaValidationError,
 } from "../errors.ts"
-import { jsonSchemaFromZod } from "../schema.ts"
+import { llmJsonSchemaFromZod } from "../schema.ts"
 import type { Message, RequestKwargs } from "../types.ts"
 import {
   asRecord,
@@ -28,7 +28,7 @@ export const toolsHandler: ModeHandler = {
           function: {
             name: EXTRACT_NAME,
             description: "Return data that matches the schema.",
-            parameters: jsonSchemaFromZod(schema),
+            parameters: llmJsonSchemaFromZod(schema),
           },
         },
       ],

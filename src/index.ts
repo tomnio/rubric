@@ -25,7 +25,7 @@ export {
   SchemaValidationError,
 } from "./errors.ts"
 
-export { jsonSchemaFromZod } from "./schema.ts"
+export { coerceParsedValue, jsonSchemaFromZod, llmJsonSchemaFromZod } from "./schema.ts"
 export type { JsonSchema } from "./schema.ts"
 export type { OpenAIChatClient } from "./adapters/openai.ts"
 

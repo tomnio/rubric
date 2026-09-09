@@ -1,6 +1,6 @@
 import type { ZodTypeAny } from "zod"
 import { JsonParseError, type SchemaValidationError } from "../errors.ts"
-import { jsonSchemaFromZod } from "../schema.ts"
+import { llmJsonSchemaFromZod } from "../schema.ts"
 import type { RequestKwargs } from "../types.ts"
 import {
   choiceMessage,
@@ -19,7 +19,7 @@ export const jsonSchemaHandler: ModeHandler = {
         json_schema: {
           name: EXTRACT_NAME,
           strict: true,
-          schema: jsonSchemaFromZod(schema),
+          schema: llmJsonSchemaFromZod(schema),
         },
       },
     }

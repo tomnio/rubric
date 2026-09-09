@@ -6,6 +6,7 @@ export type JsonSchema = {
   properties?: Record<string, JsonSchema>
   required?: string[]
   additionalProperties?: boolean
+  items?: JsonSchema
   enum?: Array<string | number | null>
   description?: string
   anyOf?: JsonSchema[]
@@ -28,7 +29,7 @@ function def(schema: ZodTypeAny): ZodDef {
 /**
  * Convert a Zod schema into JSON Schema.
  *
- * v0 supports objects (including nested), string, number, int, boolean,
+ * Supports objects (including nested), arrays, string, number, int, boolean,
  * enum, optional, and nullable. Other Zod types throw.
  */
 export function jsonSchemaFromZod(schema: ZodTypeAny): JsonSchema {
@@ -104,11 +105,52 @@ function convert(schema: ZodTypeAny): JsonSchema {
       return { type: "string", enum: [...(def(schema).values ?? [])] }
     case "ZodObject":
       return convertObject(schema as z.ZodObject<z.ZodRawShape>)
+    case "ZodArray": {
+      const element = def(schema).type as ZodTypeAny
+      return { type: "array", items: jsonSchemaFromZod(element) }
+    }
     default:
       throw new Error(
-        `Unsupported Zod type "${typeName}". v0 supports object, string, number, int, boolean, enum, optional, and nullable.`,
+        `Unsupported Zod type "${typeName}". Supported: object, array, string, number, int, boolean, enum, optional, nullable.`,
       )
   }
+}
+
+const ROOT_ARRAY_KEY = "items"
+
+/**
+ * OpenAI tools / json_schema require a root object.
+ * Root arrays are wrapped as `{ items: T[] }`.
+ */
+export function llmJsonSchemaFromZod(schema: ZodTypeAny): JsonSchema {
+  const json = jsonSchemaFromZod(schema)
+  if (json.type !== "array") {
+    return json
+  }
+  return {
+    type: "object",
+    properties: { [ROOT_ARRAY_KEY]: json },
+    required: [ROOT_ARRAY_KEY],
+    additionalProperties: false,
+  }
+}
+
+/** If the schema is a root array, accept either `T[]` or `{ items: T[] }`. */
+export function coerceParsedValue(schema: ZodTypeAny, json: unknown): unknown {
+  if (!isRootArray(schema)) {
+    return json
+  }
+  if (Array.isArray(json)) {
+    return json
+  }
+  if (json !== null && typeof json === "object" && ROOT_ARRAY_KEY in json) {
+    return (json as { items: unknown }).items
+  }
+  return json
+}
+
+function isRootArray(schema: ZodTypeAny): boolean {
+  return def(unwrap(schema).inner).typeName === "ZodArray"
 }
 
 function convertObject(schema: z.ZodObject<z.ZodRawShape>): JsonSchema {

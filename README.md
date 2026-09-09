@@ -26,12 +26,13 @@ const user = await client.create({
 
 ## Status
 
-`wrap()` works against an `LLMClient` (inject a fake in tests) in `TOOLS`, `JSON_SCHEMA`, and `MD_JSON`. Parse and validation failures reask until `maxRetries` is exhausted. A live OpenAI adapter is not implemented yet.
+v0: `wrap()` accepts a fake `LLMClient` or an OpenAI `chat.completions` client. Modes: `TOOLS`, `JSON_SCHEMA`, `MD_JSON`. Failed parses reask until `maxRetries` is exhausted.
 
 ```bash
 pnpm install
 pnpm typecheck
 pnpm test
+OPENAI_API_KEY=... pnpm example:extract-user
 ```
 
 ## License

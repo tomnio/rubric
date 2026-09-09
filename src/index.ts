@@ -28,6 +28,7 @@ export {
 export { coerceParsedValue, jsonSchemaFromZod, llmJsonSchemaFromZod } from "./schema.ts"
 export type { JsonSchema } from "./schema.ts"
 export type { OpenAIChatClient } from "./adapters/openai.ts"
+export { maybe } from "./maybe.ts"
 
 /**
  * Wrap an LLM client with schema-validated create().

@@ -1,4 +1,5 @@
 import type { Mode } from "../types.ts"
+import { anthropicToolsHandler } from "./anthropic-tools.ts"
 import { jsonSchemaHandler } from "./json-schema.ts"
 import { mdJsonHandler } from "./md-json.ts"
 import { toolsHandler } from "./tools.ts"
@@ -12,5 +13,7 @@ export function handlerFor(mode: Mode): ModeHandler {
       return jsonSchemaHandler
     case "MD_JSON":
       return mdJsonHandler
+    case "ANTHROPIC_TOOLS":
+      return anthropicToolsHandler
   }
 }

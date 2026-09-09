@@ -1,3 +1,9 @@
+import {
+  fromOpenAI,
+  isLLMClient,
+  isOpenAIChatClient,
+  type OpenAIChatClient,
+} from "./adapters/openai.ts"
 import { extract } from "./extract.ts"
 import type { LLMClient, RubricClient, WrapOptions } from "./types.ts"
 
@@ -21,15 +27,29 @@ export {
 
 export { jsonSchemaFromZod } from "./schema.ts"
 export type { JsonSchema } from "./schema.ts"
+export type { OpenAIChatClient } from "./adapters/openai.ts"
 
 /**
  * Wrap an LLM client with schema-validated create().
+ * Accepts either a fake `LLMClient` or an OpenAI-shaped `chat.completions` client.
  * The original client is not mutated.
  */
-export function wrap(client: LLMClient, options?: WrapOptions): RubricClient {
+export function wrap(
+  client: LLMClient | OpenAIChatClient,
+  options?: WrapOptions,
+): RubricClient {
+  let llm: LLMClient
+  if (isLLMClient(client)) {
+    llm = client
+  } else if (isOpenAIChatClient(client)) {
+    llm = fromOpenAI(client)
+  } else {
+    throw new Error("wrap() expects an LLMClient or an OpenAI chat.completions client")
+  }
+
   return {
     create(params) {
-      return extract(client, params, options)
+      return extract(llm, params, options)
     },
   }
 }

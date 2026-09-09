@@ -4,7 +4,7 @@ import {
   RetryExhaustedError,
   SchemaValidationError,
 } from "./errors.ts"
-import { toolsHandler } from "./modes/tools.ts"
+import { handlerFor } from "./modes/registry.ts"
 import type { CreateParams, LLMClient, Mode } from "./types.ts"
 
 const DEFAULT_MAX_RETRIES = 3
@@ -18,12 +18,7 @@ export async function extract<T extends z.ZodType>(
   const mode = params.mode ?? defaults?.mode ?? DEFAULT_MODE
   const maxRetries = params.maxRetries ?? defaults?.maxRetries ?? DEFAULT_MAX_RETRIES
   const attemptsAllowed = maxRetries + 1
-
-  if (mode !== "TOOLS") {
-    throw new Error(`Mode "${mode}" is not implemented`)
-  }
-
-  const handler = toolsHandler
+  const handler = handlerFor(mode)
   let kwargs = handler.prepareRequest(params.schema, {
     model: params.model,
     messages: params.messages,

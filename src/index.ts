@@ -8,10 +8,12 @@ export type {
   Mode,
   RequestKwargs,
   RubricClient,
+  ToolCall,
   WrapOptions,
 } from "./types.ts"
 
 export {
+  formatError,
   JsonParseError,
   RetryExhaustedError,
   SchemaValidationError,

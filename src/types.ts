@@ -17,10 +17,20 @@ export type RequestKwargs = {
   response_format?: unknown
 }
 
+export type ToolCall = {
+  id: string
+  type: "function"
+  function: {
+    name: string
+    arguments: string
+  }
+}
+
 export type Message = {
   role: "system" | "user" | "assistant" | "tool"
   content: string | null
   tool_call_id?: string
+  tool_calls?: ToolCall[]
 }
 
 export type WrapOptions = {

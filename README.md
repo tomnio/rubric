@@ -17,7 +17,7 @@ const User = z.object({
 const client = wrap(new OpenAI(), { mode: "TOOLS" })
 
 const user = await client.create({
-  model: "gpt-4o-mini",
+  model: "gpt-5.6-luna",
   schema: User,
   messages: [{ role: "user", content: "John is 25 years old" }],
 })
@@ -62,7 +62,7 @@ OPENAI_API_KEY=... pnpm example:extract-user
 OPENAI_API_KEY=... IMAGE_URL=https://... pnpm example:extract-image
 ```
 
-Optional: `OPENAI_MODEL` (default `gpt-4o-mini`).
+Optional: `OPENAI_MODEL` (default `gpt-5.6-luna`).
 
 This repo is not published to npm yet. From another package, point at the path or import `src/index.ts`.
 
@@ -96,7 +96,7 @@ wrap({
 
 ```ts
 const user = await client.create({
-  model: "gpt-4o-mini",
+  model: "gpt-5.6-luna",
   schema: User,
   messages: [{ role: "user", content: "John is 25 years old" }],
   maxRetries: 3,       // optional, overrides wrap()
@@ -121,7 +121,7 @@ const user = await client.create({
 import { maybe } from "rubric"
 
 const value = await client.create({
-  model: "gpt-4o-mini",
+  model: "gpt-5.6-luna",
   schema: maybe(User),
   messages: [{ role: "user", content: "It rained all afternoon." }],
 })
@@ -164,7 +164,7 @@ OpenAI-shaped streams only. `ANTHROPIC_TOOLS` is not supported yet.
 import { imageUrl } from "rubric"
 
 await client.create({
-  model: "gpt-4o-mini",
+  model: "gpt-5.6-luna",
   schema: User,
   messages: [{
     role: "user",

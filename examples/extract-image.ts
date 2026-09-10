@@ -22,7 +22,7 @@ if (!apiKey || !image) {
 const client = wrap(new OpenAI({ apiKey }), { mode: "TOOLS" })
 
 const user = await client.create({
-  model: process.env["OPENAI_MODEL"] ?? "gpt-4o-mini",
+  model: process.env["OPENAI_MODEL"] ?? "gpt-5.6-luna",
   schema: User,
   messages: [
     {

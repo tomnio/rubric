@@ -19,6 +19,7 @@ export type {
   CreateParams,
   DeepPartial,
   Hooks,
+  ImageUrlBlock,
   LLMClient,
   Message,
   Mode,
@@ -45,6 +46,7 @@ export type { JsonSchema } from "./schema.ts"
 export type { OpenAIChatClient } from "./adapters/openai.ts"
 export type { AnthropicMessagesClient } from "./adapters/anthropic.ts"
 export { maybe } from "./maybe.ts"
+export { imageUrl } from "./image.ts"
 
 /**
  * Wrap an LLM client with schema-validated create().

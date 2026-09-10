@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "example:extract-user": "tsx examples/extract-user.ts"
+    "example:extract-user": "tsx examples/extract-user.ts",
+    "example:extract-image": "tsx examples/extract-image.ts"
   },
   "engines": {
     "node": ">=20"

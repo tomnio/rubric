@@ -33,6 +33,7 @@ pnpm install
 pnpm typecheck
 pnpm test
 OPENAI_API_KEY=... pnpm example:extract-user
+OPENAI_API_KEY=... IMAGE_URL=https://... pnpm example:extract-image
 ```
 
 ## License

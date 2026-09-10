@@ -31,8 +31,17 @@ export type ToolCall = {
   }
 }
 
+export type ImageUrlBlock = {
+  type: "image_url"
+  image_url: {
+    url: string
+    detail?: "auto" | "low" | "high"
+  }
+}
+
 export type ContentBlock =
   | { type: "text"; text: string }
+  | ImageUrlBlock
   | { type: "tool_use"; id: string; name: string; input: unknown }
   | {
       type: "tool_result"

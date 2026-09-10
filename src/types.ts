@@ -82,4 +82,8 @@ export type RubricClient = {
   createPartial<T extends z.ZodType>(
     params: CreateParams<T>,
   ): AsyncIterable<DeepPartial<z.infer<T>>>
+  /** Stream complete items. `schema` is the item type, not an array. */
+  createIterable<T extends z.ZodType>(
+    params: CreateParams<T>,
+  ): AsyncIterable<z.infer<T>>
 }

@@ -1,8 +1,8 @@
-import { parse as parsePartialJson } from "partial-json"
 import type { z } from "zod"
 import { JsonParseError } from "./errors.ts"
 import { handlerFor } from "./modes/registry.ts"
 import { coerceParsedValue, deepPartialZod } from "./schema.ts"
+import { parseIncomplete } from "./stream-json.ts"
 import type {
   CreateParams,
   DeepPartial,
@@ -12,27 +12,6 @@ import type {
 } from "./types.ts"
 
 const DEFAULT_MODE: Mode = "TOOLS"
-
-function jsonSlice(buffer: string): string {
-  const fence = buffer.match(/```(?:json)?\s*([\s\S]*)$/i)
-  if (fence?.[1] !== undefined) {
-    return fence[1]
-  }
-  const start = buffer.search(/[{[]/)
-  return start >= 0 ? buffer.slice(start) : buffer
-}
-
-function parseIncomplete(buffer: string): unknown {
-  const slice = jsonSlice(buffer).trim()
-  if (slice === "") {
-    return undefined
-  }
-  try {
-    return parsePartialJson(slice) as unknown
-  } catch {
-    return undefined
-  }
-}
 
 /**
  * Stream incomplete snapshots. Does not reask.

@@ -10,6 +10,7 @@ import {
   type OpenAIChatClient,
 } from "./adapters/openai.ts"
 import { extract } from "./extract.ts"
+import { extractIterable } from "./iterable.ts"
 import { extractPartial } from "./partial.ts"
 import type { LLMClient, RubricClient, WrapOptions } from "./types.ts"
 
@@ -75,6 +76,9 @@ export function wrap(
     },
     createPartial(params) {
       return extractPartial(llm, params, defaults)
+    },
+    createIterable(params) {
+      return extractIterable(llm, params, defaults)
     },
   }
 }

@@ -26,7 +26,7 @@ const user = await client.create({
 
 ## Status
 
-`wrap()` accepts a fake `LLMClient`, OpenAI `chat.completions`, or Anthropic `messages`. Modes: `TOOLS`, `JSON_SCHEMA`, `MD_JSON`, `ANTHROPIC_TOOLS`. `createPartial()` streams incomplete objects (OpenAI-shaped chunks). Failed parses reask until `maxRetries` is exhausted.
+`wrap()` accepts a fake `LLMClient`, OpenAI `chat.completions`, or Anthropic `messages`. Modes: `TOOLS`, `JSON_SCHEMA`, `MD_JSON`, `ANTHROPIC_TOOLS`. `createPartial()` streams incomplete objects; `createIterable()` streams complete list items. Failed parses reask until `maxRetries` is exhausted.
 
 ```bash
 pnpm install

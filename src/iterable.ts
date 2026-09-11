@@ -19,9 +19,6 @@ export async function* extractIterable<T extends z.ZodType>(
   defaults?: WrapOptions,
 ): AsyncGenerator<z.infer<T>> {
   const mode = params.mode ?? defaults?.mode ?? DEFAULT_MODE
-  if (mode === "ANTHROPIC_TOOLS") {
-    throw new Error("createIterable() does not support ANTHROPIC_TOOLS yet")
-  }
   if (!client.chatCompletionsStream) {
     throw new Error("LLMClient does not implement chatCompletionsStream")
   }

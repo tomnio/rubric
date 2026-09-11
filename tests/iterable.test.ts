@@ -110,6 +110,40 @@ describe("createIterable", () => {
     ])
   })
 
+  it("yields complete items from Anthropic input_json_delta chunks", async () => {
+    const client = wrap(
+      streamClient([
+        {
+          type: "content_block_delta",
+          delta: {
+            type: "input_json_delta",
+            partial_json: '{"items":[{"name":"John","age":25},',
+          },
+        },
+        {
+          type: "content_block_delta",
+          delta: {
+            type: "input_json_delta",
+            partial_json: '{"name":"Jane","age":30}]}',
+          },
+        },
+      ]),
+      { mode: "ANTHROPIC_TOOLS" },
+    )
+
+    const items = await collect(
+      client.createIterable({
+        model: "test-model",
+        schema: User,
+        messages: [{ role: "user", content: "John is 25 and Jane is 30" }],
+      }),
+    )
+    expect(items).toEqual([
+      { name: "John", age: 25 },
+      { name: "Jane", age: 30 },
+    ])
+  })
+
   it("throws when no complete item arrives", async () => {
     const client = wrap(streamClient([contentDelta('[{"name":"Jo')]), {
       mode: "JSON_SCHEMA",

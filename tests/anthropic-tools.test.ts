@@ -137,4 +137,31 @@ describe("ANTHROPIC_TOOLS", () => {
     expect(body.tools).toBeDefined()
     expect(body.max_tokens).toBe(1024)
   })
+
+  it("streams from messages.create when stream is true", async () => {
+    async function* events() {
+      yield {
+        type: "content_block_delta",
+        delta: { type: "input_json_delta", partial_json: '{"name":"John","age":25}' },
+      }
+    }
+    const create = vi.fn(async (body: unknown) => {
+      const stream = (body as { stream?: boolean }).stream
+      if (stream) {
+        return events()
+      }
+      return toolUseResponse({ name: "John", age: 25 })
+    })
+    const client = wrap({ messages: { create } })
+    const snapshots: unknown[] = []
+    for await (const snap of client.createPartial({
+      model: "test-model",
+      schema: User,
+      messages: [{ role: "user", content: "John is 25 years old" }],
+    })) {
+      snapshots.push(snap)
+    }
+    expect(snapshots.at(-1)).toEqual({ name: "John", age: 25 })
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ stream: true })
+  })
 })

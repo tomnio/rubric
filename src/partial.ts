@@ -1,15 +1,15 @@
 import type { z } from "zod"
-import { JsonParseError } from "./errors.ts"
-import { handlerFor } from "./modes/registry.ts"
-import { coerceParsedValue, deepPartialZod } from "./schema.ts"
-import { parseIncomplete } from "./stream-json.ts"
+import { JsonParseError } from "./errors.js"
+import { handlerFor } from "./modes/registry.js"
+import { coerceParsedValue, deepPartialZod } from "./schema.js"
+import { parseIncomplete } from "./stream-json.js"
 import type {
   CreateParams,
   DeepPartial,
   LLMClient,
   Mode,
   WrapOptions,
-} from "./types.ts"
+} from "./types.js"
 
 const DEFAULT_MODE: Mode = "TOOLS"
 

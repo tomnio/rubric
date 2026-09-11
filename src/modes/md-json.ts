@@ -1,14 +1,14 @@
 import type { ZodTypeAny } from "zod"
-import { JsonParseError, type SchemaValidationError } from "../errors.ts"
-import { jsonSchemaFromZod } from "../schema.ts"
-import type { RequestKwargs } from "../types.ts"
+import { JsonParseError, type SchemaValidationError } from "../errors.js"
+import { jsonSchemaFromZod } from "../schema.js"
+import type { RequestKwargs } from "../types.js"
 import {
   choiceMessage,
   openaiContentDelta,
   parseJsonText,
   reaskWithUserMessage,
-} from "./helpers.ts"
-import type { ModeHandler } from "./types.ts"
+} from "./helpers.js"
+import type { ModeHandler } from "./types.js"
 
 const FENCE = /```(?:json)?\s*([\s\S]*?)```/i
 

@@ -7,8 +7,8 @@ import {
   wrap,
   type LLMClient,
   type RequestKwargs,
-} from "../src/index.ts"
-import { EXTRACT_TOOL_NAME, toolsHandler } from "../src/modes/tools.ts"
+} from "../src/index.js"
+import { EXTRACT_TOOL_NAME, toolsHandler } from "../src/modes/tools.js"
 
 const User = z.object({
   name: z.string(),

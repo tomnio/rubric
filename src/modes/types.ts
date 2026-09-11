@@ -1,6 +1,6 @@
 import type { ZodTypeAny } from "zod"
-import type { JsonParseError, SchemaValidationError } from "../errors.ts"
-import type { RequestKwargs } from "../types.ts"
+import type { JsonParseError, SchemaValidationError } from "../errors.js"
+import type { RequestKwargs } from "../types.js"
 
 /** One wire format: how schema is sent, how JSON is read, how errors are attached. */
 export type ModeHandler = {

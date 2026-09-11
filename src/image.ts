@@ -1,4 +1,4 @@
-import type { ImageUrlBlock } from "./types.ts"
+import type { ImageUrlBlock } from "./types.js"
 
 /** OpenAI image part for `messages[].content`. */
 export function imageUrl(

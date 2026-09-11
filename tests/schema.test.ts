@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
-import { jsonSchemaFromZod, llmJsonSchemaFromZod } from "../src/schema.ts"
+import { jsonSchemaFromZod, llmJsonSchemaFromZod } from "../src/schema.js"
 
 describe("jsonSchemaFromZod", () => {
   it("converts a flat object with string and int", () => {

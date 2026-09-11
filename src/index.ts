@@ -2,17 +2,17 @@ import {
   fromAnthropic,
   isAnthropicMessagesClient,
   type AnthropicMessagesClient,
-} from "./adapters/anthropic.ts"
+} from "./adapters/anthropic.js"
 import {
   fromOpenAI,
   isLLMClient,
   isOpenAIChatClient,
   type OpenAIChatClient,
-} from "./adapters/openai.ts"
-import { extract } from "./extract.ts"
-import { extractIterable } from "./iterable.ts"
-import { extractPartial } from "./partial.ts"
-import type { LLMClient, RubricClient, WrapOptions } from "./types.ts"
+} from "./adapters/openai.js"
+import { extract } from "./extract.js"
+import { extractIterable } from "./iterable.js"
+import { extractPartial } from "./partial.js"
+import type { LLMClient, RubricClient, WrapOptions } from "./types.js"
 
 export type {
   ContentBlock,
@@ -27,26 +27,26 @@ export type {
   RubricClient,
   ToolCall,
   WrapOptions,
-} from "./types.ts"
+} from "./types.js"
 
 export {
   formatError,
   JsonParseError,
   RetryExhaustedError,
   SchemaValidationError,
-} from "./errors.ts"
+} from "./errors.js"
 
 export {
   coerceParsedValue,
   deepPartialZod,
   jsonSchemaFromZod,
   llmJsonSchemaFromZod,
-} from "./schema.ts"
-export type { JsonSchema } from "./schema.ts"
-export type { OpenAIChatClient } from "./adapters/openai.ts"
-export type { AnthropicMessagesClient } from "./adapters/anthropic.ts"
-export { maybe } from "./maybe.ts"
-export { imageUrl } from "./image.ts"
+} from "./schema.js"
+export type { JsonSchema } from "./schema.js"
+export type { OpenAIChatClient } from "./adapters/openai.js"
+export type { AnthropicMessagesClient } from "./adapters/anthropic.js"
+export { maybe } from "./maybe.js"
+export { imageUrl } from "./image.js"
 
 /**
  * Wrap an LLM client with schema-validated create().

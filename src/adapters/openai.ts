@@ -1,4 +1,4 @@
-import type { LLMClient, RequestKwargs } from "../types.ts"
+import type { LLMClient, RequestKwargs } from "../types.js"
 
 /** Duck-typed OpenAI chat client. Avoids a hard runtime dependency on `openai`. */
 export type OpenAIChatClient = {

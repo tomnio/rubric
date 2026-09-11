@@ -1,9 +1,9 @@
 import { z } from "zod"
-import { JsonParseError } from "./errors.ts"
-import { handlerFor } from "./modes/registry.ts"
-import { coerceParsedValue } from "./schema.ts"
-import { parseIncomplete } from "./stream-json.ts"
-import type { CreateParams, LLMClient, Mode, WrapOptions } from "./types.ts"
+import { JsonParseError } from "./errors.js"
+import { handlerFor } from "./modes/registry.js"
+import { coerceParsedValue } from "./schema.js"
+import { parseIncomplete } from "./stream-json.js"
+import type { CreateParams, LLMClient, Mode, WrapOptions } from "./types.js"
 
 const DEFAULT_MODE: Mode = "TOOLS"
 

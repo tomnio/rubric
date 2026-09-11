@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { z } from "zod"
-import { wrap } from "../src/index.ts"
-import { EXTRACT_TOOL_NAME } from "../src/modes/tools.ts"
+import { wrap } from "../src/index.js"
+import { EXTRACT_TOOL_NAME } from "../src/modes/tools.js"
 
 const User = z.object({
   name: z.string(),

@@ -1,5 +1,5 @@
-import { formatError, JsonParseError, type SchemaValidationError } from "../errors.ts"
-import type { Message, RequestKwargs, ToolCall } from "../types.ts"
+import { formatError, JsonParseError, type SchemaValidationError } from "../errors.js"
+import type { Message, RequestKwargs, ToolCall } from "../types.js"
 
 export const EXTRACT_NAME = "extract"
 

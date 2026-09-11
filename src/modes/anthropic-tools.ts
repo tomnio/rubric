@@ -3,11 +3,11 @@ import {
   formatError,
   JsonParseError,
   type SchemaValidationError,
-} from "../errors.ts"
-import { llmJsonSchemaFromZod } from "../schema.ts"
-import type { ContentBlock, Message, RequestKwargs } from "../types.ts"
-import { asRecord, EXTRACT_NAME } from "./helpers.ts"
-import type { ModeHandler } from "./types.ts"
+} from "../errors.js"
+import { llmJsonSchemaFromZod } from "../schema.js"
+import type { ContentBlock, Message, RequestKwargs } from "../types.js"
+import { asRecord, EXTRACT_NAME } from "./helpers.js"
+import type { ModeHandler } from "./types.js"
 
 const DEFAULT_MAX_TOKENS = 1024
 

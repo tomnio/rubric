@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { z } from "zod"
-import { wrap, type LLMClient, type RequestKwargs } from "../src/index.ts"
+import { wrap, type LLMClient, type RequestKwargs } from "../src/index.js"
 
 const User = z.object({
   name: z.string(),

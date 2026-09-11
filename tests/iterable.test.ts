@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
-import { JsonParseError, wrap, type LLMClient } from "../src/index.ts"
+import { JsonParseError, wrap, type LLMClient } from "../src/index.js"
 
 const User = z.object({
   name: z.string(),

@@ -1,15 +1,15 @@
 import type { ZodTypeAny } from "zod"
-import { JsonParseError, type SchemaValidationError } from "../errors.ts"
-import { llmJsonSchemaFromZod } from "../schema.ts"
-import type { RequestKwargs } from "../types.ts"
+import { JsonParseError, type SchemaValidationError } from "../errors.js"
+import { llmJsonSchemaFromZod } from "../schema.js"
+import type { RequestKwargs } from "../types.js"
 import {
   choiceMessage,
   EXTRACT_NAME,
   openaiContentDelta,
   parseJsonText,
   reaskWithUserMessage,
-} from "./helpers.ts"
-import type { ModeHandler } from "./types.ts"
+} from "./helpers.js"
+import type { ModeHandler } from "./types.js"
 
 export const jsonSchemaHandler: ModeHandler = {
   prepareRequest(schema: ZodTypeAny, kwargs: RequestKwargs): RequestKwargs {

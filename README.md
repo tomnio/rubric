@@ -63,9 +63,10 @@ Live extract (not in CI):
 cp .env.example .env   # then set OPENAI_API_KEY
 OPENAI_API_KEY=... pnpm example:extract-user
 OPENAI_API_KEY=... IMAGE_URL=https://... pnpm example:extract-image
+ANTHROPIC_API_KEY=... pnpm example:extract-user-anthropic
 ```
 
-Optional: `OPENAI_MODEL` (default `gpt-5.6-luna`).
+Optional: `OPENAI_MODEL` (default `gpt-5.6-luna`), `ANTHROPIC_MODEL` (default `claude-sonnet-4-6`).
 
 This repo is not published to npm yet. From another package, point at the path or import `src/index.ts`.
 

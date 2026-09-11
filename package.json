@@ -16,7 +16,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "example:extract-user": "tsx examples/extract-user.ts",
-    "example:extract-image": "tsx examples/extract-image.ts"
+    "example:extract-image": "tsx examples/extract-image.ts",
+    "example:extract-user-anthropic": "tsx examples/extract-user-anthropic.ts"
   },
   "engines": {
     "node": ">=20"
@@ -24,15 +25,20 @@
   "packageManager": "pnpm@10.28.2",
   "license": "MIT",
   "peerDependencies": {
+    "@anthropic-ai/sdk": ">=0.39.0",
     "openai": ">=4.0.0",
     "zod": "^3.24.0"
   },
   "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": {
+      "optional": true
+    },
     "openai": {
       "optional": true
     }
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
     "openai": "^4.104.0",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3",

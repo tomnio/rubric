@@ -140,7 +140,13 @@ export const anthropicToolsHandler: ModeHandler = {
     }
   },
 
-  deltaFromChunk(): string {
+  deltaFromChunk(raw: unknown): string {
+    const root = asRecord(raw)
+    const delta = asRecord(root?.["delta"])
+    const partial = delta?.["partial_json"]
+    if (typeof partial === "string") {
+      return partial
+    }
     return ""
   },
 }

@@ -25,5 +25,19 @@ export function fromAnthropic(client: AnthropicMessagesClient): LLMClient {
     chatCompletionsCreate(kwargs: RequestKwargs) {
       return client.messages.create(kwargs)
     },
+    async *chatCompletionsStream(kwargs: RequestKwargs) {
+      const result = await Promise.resolve(
+        client.messages.create({ ...kwargs, stream: true }),
+      )
+      if (
+        result !== null &&
+        typeof result === "object" &&
+        Symbol.asyncIterator in result
+      ) {
+        yield* result as AsyncIterable<unknown>
+        return
+      }
+      throw new Error("Anthropic stream did not return an async iterable")
+    },
   }
 }

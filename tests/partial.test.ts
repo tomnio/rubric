@@ -102,16 +102,31 @@ describe("createPartial", () => {
     await expect(collect(iterable)).rejects.toThrow(/chatCompletionsStream/)
   })
 
-  it("throws for ANTHROPIC_TOOLS", async () => {
-    const client = wrap(streamClient([contentDelta("{}")]), {
-      mode: "ANTHROPIC_TOOLS",
-    })
-    const iterable = client.createPartial({
-      model: "test-model",
-      schema: User,
-      messages: [{ role: "user", content: "John is 25 years old" }],
-    })
-    await expect(collect(iterable)).rejects.toThrow(/ANTHROPIC_TOOLS/)
+  it("yields snapshots from Anthropic input_json_delta chunks", async () => {
+    const client = wrap(
+      streamClient([
+        {
+          type: "content_block_delta",
+          delta: { type: "input_json_delta", partial_json: '{"name": "Jo' },
+        },
+        {
+          type: "content_block_delta",
+          delta: { type: "input_json_delta", partial_json: 'hn", "age": 25}' },
+        },
+      ]),
+      { mode: "ANTHROPIC_TOOLS" },
+    )
+
+    const snapshots = await collect(
+      client.createPartial({
+        model: "test-model",
+        schema: User,
+        messages: [{ role: "user", content: "John is 25 years old" }],
+      }),
+    )
+
+    expect(snapshots[0]).toMatchObject({ name: "Jo" })
+    expect(snapshots.at(-1)).toEqual({ name: "John", age: 25 })
   })
 
   it("throws JsonParseError when the stream never becomes JSON", async () => {

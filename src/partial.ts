@@ -15,7 +15,6 @@ const DEFAULT_MODE: Mode = "TOOLS"
 
 /**
  * Stream incomplete snapshots. Does not reask.
- * TOOLS / JSON_SCHEMA / MD_JSON only (OpenAI-shaped chunks).
  */
 export async function* extractPartial<T extends z.ZodType>(
   client: LLMClient,
@@ -23,9 +22,6 @@ export async function* extractPartial<T extends z.ZodType>(
   defaults?: WrapOptions,
 ): AsyncGenerator<DeepPartial<z.infer<T>>> {
   const mode = params.mode ?? defaults?.mode ?? DEFAULT_MODE
-  if (mode === "ANTHROPIC_TOOLS") {
-    throw new Error("createPartial() does not support ANTHROPIC_TOOLS yet")
-  }
   if (!client.chatCompletionsStream) {
     throw new Error("LLMClient does not implement chatCompletionsStream")
   }

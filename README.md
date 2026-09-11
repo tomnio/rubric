@@ -159,7 +159,7 @@ for await (const user of client.createIterable({ model, schema: User, messages }
 }
 ```
 
-OpenAI-shaped streams only. `ANTHROPIC_TOOLS` is not supported yet.
+OpenAI-shaped chunks (`delta.content` / tool `arguments`) and Anthropic `input_json_delta.partial_json`.
 
 ### Images
 

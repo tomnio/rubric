@@ -145,8 +145,36 @@ describe("jsonSchemaFromZod", () => {
     })
   })
 
+  it("converts unions and discriminated unions to anyOf", () => {
+    const Pet = z.union([
+      z.object({ kind: z.literal("dog"), bark: z.boolean() }),
+      z.object({ kind: z.literal("cat"), lives: z.number() }),
+    ])
+    const schema = jsonSchemaFromZod(Pet)
+    expect(schema.anyOf).toHaveLength(2)
+    expect(schema.anyOf?.[0]).toMatchObject({
+      properties: { kind: { type: "string", enum: ["dog"] } },
+    })
+
+    const Tagged = z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("dog"), bark: z.boolean() }),
+      z.object({ kind: z.literal("cat"), lives: z.number() }),
+    ])
+    expect(jsonSchemaFromZod(Tagged).anyOf).toHaveLength(2)
+  })
+
+  it("converts records and dates", () => {
+    expect(jsonSchemaFromZod(z.record(z.number()))).toEqual({
+      type: "object",
+      additionalProperties: { type: "number" },
+    })
+    expect(jsonSchemaFromZod(z.date())).toEqual({
+      type: "string",
+      format: "date-time",
+    })
+  })
+
   it("throws on unsupported Zod types", () => {
-    expect(() => jsonSchemaFromZod(z.date())).toThrow(/Unsupported Zod type/)
     expect(() => jsonSchemaFromZod(z.map(z.string(), z.string()))).toThrow(
       /Unsupported Zod type/,
     )

@@ -37,6 +37,7 @@ export {
 } from "./errors.js"
 
 export {
+  assertOpenAiStrictSchema,
   coerceParsedValue,
   deepPartialZod,
   jsonSchemaFromZod,

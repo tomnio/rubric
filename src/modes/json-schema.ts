@@ -1,6 +1,6 @@
 import type { ZodTypeAny } from "zod"
 import { JsonParseError, type SchemaValidationError } from "../errors.js"
-import { llmJsonSchemaFromZod } from "../schema.js"
+import { assertOpenAiStrictSchema, llmJsonSchemaFromZod } from "../schema.js"
 import type { RequestKwargs } from "../types.js"
 import {
   choiceMessage,
@@ -13,6 +13,8 @@ import type { ModeHandler } from "./types.js"
 
 export const jsonSchemaHandler: ModeHandler = {
   prepareRequest(schema: ZodTypeAny, kwargs: RequestKwargs): RequestKwargs {
+    const jsonSchema = llmJsonSchemaFromZod(schema)
+    assertOpenAiStrictSchema(jsonSchema)
     return {
       ...kwargs,
       response_format: {
@@ -20,7 +22,7 @@ export const jsonSchemaHandler: ModeHandler = {
         json_schema: {
           name: EXTRACT_NAME,
           strict: true,
-          schema: llmJsonSchemaFromZod(schema),
+          schema: jsonSchema,
         },
       },
     }

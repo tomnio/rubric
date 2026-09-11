@@ -322,3 +322,47 @@ function convertObject(schema: z.ZodObject<z.ZodRawShape>): JsonSchema {
   }
   return result
 }
+
+/**
+ * OpenAI `strict: true` rejects schemas Rubric still emits for TOOLS / MD_JSON.
+ * Call this from JSON_SCHEMA prepare so we fail locally instead of at the API.
+ */
+export function assertOpenAiStrictSchema(schema: JsonSchema, path = "$"): void {
+  if (schema.anyOf && schema.anyOf.length > 0) {
+    const nonNull = schema.anyOf.filter((option) => option.type !== "null")
+    const hasNull = schema.anyOf.some((option) => option.type === "null")
+    if (schema.anyOf.length === 2 && hasNull && nonNull[0]) {
+      assertOpenAiStrictSchema(nonNull[0], path)
+      return
+    }
+    throw new Error(
+      `JSON_SCHEMA strict: ${path} uses anyOf (union). OpenAI strict rejects this. Use TOOLS or MD_JSON, or a single object schema.`,
+    )
+  }
+
+  if (schema.type === "array") {
+    if (schema.items) {
+      assertOpenAiStrictSchema(schema.items, `${path}[]`)
+    }
+    return
+  }
+
+  if (schema.type === "object") {
+    if (schema.additionalProperties !== false) {
+      throw new Error(
+        `JSON_SCHEMA strict: ${path} is a record or open object (additionalProperties is not false). OpenAI strict rejects this. Use TOOLS or MD_JSON, or a fixed-key object.`,
+      )
+    }
+    const properties = schema.properties ?? {}
+    const required = new Set(schema.required ?? [])
+    const optionalKeys = Object.keys(properties).filter((key) => !required.has(key))
+    if (optionalKeys.length > 0) {
+      throw new Error(
+        `JSON_SCHEMA strict: ${path} has optional properties (${optionalKeys.join(", ")}) omitted from required. OpenAI strict requires every property in required. Use .nullable() instead of .optional(), or TOOLS / MD_JSON.`,
+      )
+    }
+    for (const [key, value] of Object.entries(properties)) {
+      assertOpenAiStrictSchema(value, `${path}.${key}`)
+    }
+  }
+}

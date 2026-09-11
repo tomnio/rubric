@@ -4,7 +4,7 @@ import {
   wrap,
   type LLMClient,
   type RequestKwargs,
-} from "../src/index.ts"
+} from "../src/index.js"
 
 const User = z.object({
   name: z.string(),

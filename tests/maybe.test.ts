@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
-import { maybe, wrap, type LLMClient } from "../src/index.ts"
-import { EXTRACT_TOOL_NAME } from "../src/modes/tools.ts"
+import { maybe, wrap, type LLMClient } from "../src/index.js"
+import { EXTRACT_TOOL_NAME } from "../src/modes/tools.js"
 
 const User = z.object({
   name: z.string(),

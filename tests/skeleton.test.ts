@@ -5,7 +5,7 @@ import {
   RetryExhaustedError,
   SchemaValidationError,
   wrap,
-} from "../src/index.ts"
+} from "../src/index.js"
 
 describe("skeleton", () => {
   it("exports wrap as a function", () => {

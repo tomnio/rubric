@@ -1,9 +1,9 @@
-import type { Mode } from "../types.ts"
-import { anthropicToolsHandler } from "./anthropic-tools.ts"
-import { jsonSchemaHandler } from "./json-schema.ts"
-import { mdJsonHandler } from "./md-json.ts"
-import { toolsHandler } from "./tools.ts"
-import type { ModeHandler } from "./types.ts"
+import type { Mode } from "../types.js"
+import { anthropicToolsHandler } from "./anthropic-tools.js"
+import { jsonSchemaHandler } from "./json-schema.js"
+import { mdJsonHandler } from "./md-json.js"
+import { toolsHandler } from "./tools.js"
+import type { ModeHandler } from "./types.js"
 
 export function handlerFor(mode: Mode): ModeHandler {
   switch (mode) {

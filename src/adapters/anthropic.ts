@@ -1,4 +1,4 @@
-import type { LLMClient, RequestKwargs } from "../types.ts"
+import type { LLMClient, RequestKwargs } from "../types.js"
 
 /** Duck-typed Anthropic messages client. No hard dependency on the SDK. */
 export type AnthropicMessagesClient = {

@@ -53,6 +53,7 @@ cd rubric
 pnpm install
 pnpm typecheck
 pnpm test
+pnpm build
 ```
 
 Pull requests and pushes to `main` run the same `typecheck` and `test` commands in GitHub Actions. Live examples are not part of CI.
@@ -68,7 +69,21 @@ ANTHROPIC_API_KEY=... pnpm example:extract-user-anthropic
 
 Optional: `OPENAI_MODEL` (default `gpt-5.6-luna`), `ANTHROPIC_MODEL` (default `claude-sonnet-4-6`).
 
-This repo is not published to npm yet. From another package, point at the path or import `src/index.ts`.
+This repo is not published to npm yet. Build the package, then depend on the folder:
+
+```bash
+pnpm build
+```
+
+```json
+{
+  "dependencies": {
+    "rubric": "file:../rubric"
+  }
+}
+```
+
+`pnpm build` writes `dist/` (`index.js` + `.d.ts`). You do not need `tsx` to load the library.
 
 ## Usage
 

@@ -3,10 +3,10 @@ import {
   JsonParseError,
   RetryExhaustedError,
   SchemaValidationError,
-} from "./errors.ts"
-import { handlerFor } from "./modes/registry.ts"
-import { coerceParsedValue } from "./schema.ts"
-import type { CreateParams, Hooks, LLMClient, Mode, WrapOptions } from "./types.ts"
+} from "./errors.js"
+import { handlerFor } from "./modes/registry.js"
+import { coerceParsedValue } from "./schema.js"
+import type { CreateParams, Hooks, LLMClient, Mode, WrapOptions } from "./types.js"
 
 const DEFAULT_MAX_RETRIES = 3
 const DEFAULT_MODE: Mode = "TOOLS"

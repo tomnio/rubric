@@ -1,5 +1,5 @@
 import type { z } from "zod"
-import type { JsonParseError, SchemaValidationError } from "./errors.ts"
+import type { JsonParseError, SchemaValidationError } from "./errors.js"
 
 /** Request encoding used to send the schema and read JSON back. */
 export type Mode = "TOOLS" | "JSON_SCHEMA" | "MD_JSON" | "ANTHROPIC_TOOLS"

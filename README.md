@@ -54,6 +54,8 @@ pnpm typecheck
 pnpm test
 ```
 
+Pull requests and pushes to `main` run the same `typecheck` and `test` commands in GitHub Actions. Live examples are not part of CI.
+
 Live extract (not in CI):
 
 ```bash

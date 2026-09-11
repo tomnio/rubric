@@ -35,6 +35,7 @@ const user = await client.create({
 | **Modes** | `TOOLS` (default), `JSON_SCHEMA`, `MD_JSON`, `ANTHROPIC_TOOLS` |
 | **Clients** | Fake `LLMClient`, OpenAI `chat.completions`, Anthropic `messages` |
 | **Lists** | `z.array(...)`; root arrays are sent as `{ items: T[] }` |
+| **Zod extras** | `z.union` / `z.discriminatedUnion`, `z.record`, `z.date()` (ISO strings) |
 | **Maybe** | `maybe(User)` → `{ result, error, message }` instead of throwing on a miss |
 | **Hooks** | `onRequest` / `onParseError` / `onSuccess` |
 | **Stream** | `createPartial()` incomplete objects; `createIterable()` complete list items |

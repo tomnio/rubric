@@ -21,7 +21,8 @@
     "test:watch": "vitest",
     "example:extract-user": "tsx examples/extract-user.ts",
     "example:extract-image": "tsx examples/extract-image.ts",
-    "example:extract-user-anthropic": "tsx examples/extract-user-anthropic.ts"
+    "example:extract-user-anthropic": "tsx examples/extract-user-anthropic.ts",
+    "example:extract-image-anthropic": "tsx examples/extract-image-anthropic.ts"
   },
   "engines": {
     "node": ">=20"

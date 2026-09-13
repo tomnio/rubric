@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
 import {
+  anthropicImageUrl,
   imageUrl,
   wrap,
   type LLMClient,
@@ -108,6 +109,49 @@ describe("image messages", () => {
     expect(userMessage?.content).toEqual([
       { type: "text", text: "Who is this?" },
       { type: "image_url", image_url: { url: "data:image/png;base64,aaa" } },
+    ])
+  })
+
+  it("maps OpenAI image_url to Anthropic image parts", async () => {
+    const capture: RequestKwargs[] = []
+    const original = [
+      { type: "text" as const, text: "Who is this?" },
+      imageUrl("https://example.com/person.jpg"),
+      imageUrl("data:image/png;base64,aaa"),
+    ]
+    const client = wrap(
+      {
+        async chatCompletionsCreate(kwargs) {
+          capture.push(kwargs)
+          return {
+            content: [
+              {
+                type: "tool_use",
+                id: "toolu_1",
+                name: "extract",
+                input: { name: "John", age: 25 },
+              },
+            ],
+          }
+        },
+      } satisfies LLMClient,
+      { mode: "ANTHROPIC_TOOLS" },
+    )
+
+    await client.create({
+      model: "test-model",
+      schema: User,
+      messages: [{ role: "user", content: original }],
+    })
+
+    expect(original[1]).toEqual(imageUrl("https://example.com/person.jpg"))
+    expect(capture[0]?.messages[0]?.content).toEqual([
+      { type: "text", text: "Who is this?" },
+      anthropicImageUrl("https://example.com/person.jpg"),
+      {
+        type: "image",
+        source: { type: "base64", media_type: "image/png", data: "aaa" },
+      },
     ])
   })
 })

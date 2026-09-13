@@ -5,6 +5,7 @@ import {
   type SchemaValidationError,
 } from "../errors.js"
 import { llmJsonSchemaFromZod } from "../schema.js"
+import { toAnthropicContent } from "../image.js"
 import type { ContentBlock, Message, RequestKwargs } from "../types.js"
 import { asRecord, EXTRACT_NAME } from "./helpers.js"
 import type { ModeHandler } from "./types.js"
@@ -47,6 +48,13 @@ export const anthropicToolsHandler: ModeHandler = {
     for (const message of kwargs.messages) {
       if (message.role === "system" && typeof message.content === "string") {
         systemParts.push(message.content)
+        continue
+      }
+      if (Array.isArray(message.content)) {
+        messages.push({
+          ...message,
+          content: toAnthropicContent(message.content),
+        })
         continue
       }
       messages.push(message)

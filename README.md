@@ -39,7 +39,7 @@ const user = await client.create({
 | **Maybe** | `maybe(User)` → `{ result, error, message }` instead of throwing on a miss |
 | **Hooks** | `onRequest` / `onParseError` / `onSuccess` / `onUsage` (token totals across reasks) |
 | **Stream** | `createPartial()` incomplete objects; `createIterable()` complete list items |
-| **Images** | `imageUrl(url)` in `messages[].content` |
+| **Images** | `imageUrl(url)` in `messages[].content` (Anthropic maps these to `image` / `source`) |
 
 Not included: a provider router, CLI, batch jobs, cache, or extra vendors.
 
@@ -65,6 +65,7 @@ cp .env.example .env   # then set OPENAI_API_KEY
 OPENAI_API_KEY=... pnpm example:extract-user
 OPENAI_API_KEY=... IMAGE_URL=https://... pnpm example:extract-image
 ANTHROPIC_API_KEY=... pnpm example:extract-user-anthropic
+ANTHROPIC_API_KEY=... IMAGE_URL=https://... pnpm example:extract-image-anthropic
 ```
 
 Optional: `OPENAI_MODEL` (default `gpt-5.6-luna`), `ANTHROPIC_MODEL` (default `claude-sonnet-4-6`).
@@ -195,6 +196,8 @@ await client.create({
   }],
 })
 ```
+
+`ANTHROPIC_TOOLS` maps `imageUrl()` to Anthropic `{ type: "image", source }`. You can also pass `anthropicImageUrl` / `anthropicImageBase64` directly.
 
 ## License
 

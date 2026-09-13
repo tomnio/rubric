@@ -1,4 +1,5 @@
 import type { ZodIssue } from "zod"
+import type { TokenUsage } from "./usage.js"
 
 /** Short error text attached to the next LLM request, including refine issues. */
 export function formatError(
@@ -49,16 +50,19 @@ export class SchemaValidationError extends Error {
 export class RetryExhaustedError extends Error {
   readonly attempts: number
   readonly lastError: JsonParseError | SchemaValidationError
+  readonly usage: TokenUsage | undefined
 
   constructor(
     message: string,
     attempts: number,
     lastError: JsonParseError | SchemaValidationError,
+    usage?: TokenUsage,
   ) {
     super(message)
     this.name = "RetryExhaustedError"
     this.attempts = attempts
     this.lastError = lastError
+    this.usage = usage
     Object.setPrototypeOf(this, new.target.prototype)
   }
 }

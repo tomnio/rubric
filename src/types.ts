@@ -1,5 +1,6 @@
 import type { z } from "zod"
 import type { JsonParseError, SchemaValidationError } from "./errors.js"
+import type { TokenUsage } from "./usage.js"
 
 /** Request encoding used to send the schema and read JSON back. */
 export type Mode = "TOOLS" | "JSON_SCHEMA" | "MD_JSON" | "ANTHROPIC_TOOLS"
@@ -61,6 +62,8 @@ export type Hooks = {
   onRequest?: (kwargs: RequestKwargs) => void
   onParseError?: (error: JsonParseError | SchemaValidationError) => void
   onSuccess?: (value: unknown) => void
+  /** Totals across every attempt in this create() call, including reasks. */
+  onUsage?: (usage: TokenUsage) => void
 }
 
 export type WrapOptions = {

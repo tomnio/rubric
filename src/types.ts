@@ -40,9 +40,17 @@ export type ImageUrlBlock = {
   }
 }
 
+export type AnthropicImageBlock = {
+  type: "image"
+  source:
+    | { type: "url"; url: string }
+    | { type: "base64"; media_type: string; data: string }
+}
+
 export type ContentBlock =
   | { type: "text"; text: string }
   | ImageUrlBlock
+  | AnthropicImageBlock
   | { type: "tool_use"; id: string; name: string; input: unknown }
   | {
       type: "tool_result"

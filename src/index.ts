@@ -19,6 +19,7 @@ export type {
   CreateParams,
   DeepPartial,
   Hooks,
+  AnthropicImageBlock,
   ImageUrlBlock,
   LLMClient,
   Message,
@@ -48,7 +49,12 @@ export type { TokenUsage } from "./usage.js"
 export type { OpenAIChatClient } from "./adapters/openai.js"
 export type { AnthropicMessagesClient } from "./adapters/anthropic.js"
 export { maybe } from "./maybe.js"
-export { imageUrl } from "./image.js"
+export {
+  anthropicImageBase64,
+  anthropicImageUrl,
+  imageUrl,
+  toAnthropicContent,
+} from "./image.js"
 
 /**
  * Wrap an LLM client with schema-validated create().

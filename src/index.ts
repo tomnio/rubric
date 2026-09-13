@@ -44,6 +44,7 @@ export {
   llmJsonSchemaFromZod,
 } from "./schema.js"
 export type { JsonSchema } from "./schema.js"
+export type { TokenUsage } from "./usage.js"
 export type { OpenAIChatClient } from "./adapters/openai.js"
 export type { AnthropicMessagesClient } from "./adapters/anthropic.js"
 export { maybe } from "./maybe.js"

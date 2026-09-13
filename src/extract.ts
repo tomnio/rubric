@@ -7,6 +7,7 @@ import {
 import { handlerFor } from "./modes/registry.js"
 import { coerceParsedValue } from "./schema.js"
 import type { CreateParams, Hooks, LLMClient, Mode, WrapOptions } from "./types.js"
+import { addUsage, emptyUsage } from "./usage.js"
 
 const DEFAULT_MAX_RETRIES = 3
 const DEFAULT_MODE: Mode = "TOOLS"
@@ -27,11 +28,13 @@ export async function extract<T extends z.ZodType>(
   })
   let lastError: JsonParseError | SchemaValidationError | undefined
   let attempts = 0
+  let usage = emptyUsage()
 
   while (attempts < attemptsAllowed) {
     attempts += 1
     hooks.onRequest?.(kwargs)
     const raw = await client.chatCompletionsCreate(kwargs)
+    usage = addUsage(usage, raw)
 
     try {
       const json = coerceParsedValue(params.schema, handler.parseResponse(raw))
@@ -43,6 +46,7 @@ export async function extract<T extends z.ZodType>(
           parsed.error.issues,
         )
       }
+      hooks.onUsage?.(usage)
       hooks.onSuccess?.(parsed.data)
       return parsed.data
     } catch (err) {
@@ -58,9 +62,11 @@ export async function extract<T extends z.ZodType>(
     }
   }
 
+  hooks.onUsage?.(usage)
   throw new RetryExhaustedError(
     `Failed after ${attempts} attempt(s)`,
     attempts,
     lastError as JsonParseError | SchemaValidationError,
+    usage,
   )
 }

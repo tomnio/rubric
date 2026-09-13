@@ -37,7 +37,7 @@ const user = await client.create({
 | **Lists** | `z.array(...)`; root arrays are sent as `{ items: T[] }` |
 | **Zod extras** | `z.union` / `z.discriminatedUnion`, `z.record`, `z.date()` (ISO strings) |
 | **Maybe** | `maybe(User)` → `{ result, error, message }` instead of throwing on a miss |
-| **Hooks** | `onRequest` / `onParseError` / `onSuccess` |
+| **Hooks** | `onRequest` / `onParseError` / `onSuccess` / `onUsage` (token totals across reasks) |
 | **Stream** | `createPartial()` incomplete objects; `createIterable()` complete list items |
 | **Images** | `imageUrl(url)` in `messages[].content` |
 
@@ -157,6 +157,7 @@ wrap(openai, {
     onRequest(kwargs) {},
     onParseError(error) {},
     onSuccess(value) {},
+    onUsage(usage) {},
   },
 })
 ```

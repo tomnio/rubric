@@ -70,4 +70,39 @@ describe("OpenAI adapter", () => {
     })
     expect(user).toEqual({ name: "John", age: 25 })
   })
+
+  it("requests include_usage on streamed creates", async () => {
+    async function* chunks() {
+      yield {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                { function: { arguments: '{"name":"John","age":25}' } },
+              ],
+            },
+          },
+        ],
+      }
+    }
+    const create = vi.fn(async (body: unknown) => {
+      expect((body as { stream?: boolean; stream_options?: unknown }).stream).toBe(
+        true,
+      )
+      expect(
+        (body as { stream_options?: unknown }).stream_options,
+      ).toEqual({ include_usage: true })
+      return chunks()
+    })
+    const client = wrap({ chat: { completions: { create } } })
+    const snapshots: unknown[] = []
+    for await (const snap of client.createPartial({
+      model: "test-model",
+      schema: User,
+      messages: [{ role: "user", content: "John is 25 years old" }],
+    })) {
+      snapshots.push(snap)
+    }
+    expect(snapshots.at(-1)).toEqual({ name: "John", age: 25 })
+  })
 })

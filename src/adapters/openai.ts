@@ -40,7 +40,11 @@ export function fromOpenAI(client: OpenAIChatClient): LLMClient {
     },
     async *chatCompletionsStream(kwargs: RequestKwargs) {
       const result = await Promise.resolve(
-        client.chat.completions.create({ ...kwargs, stream: true }),
+        client.chat.completions.create({
+          ...kwargs,
+          stream: true,
+          stream_options: kwargs.stream_options ?? { include_usage: true },
+        }),
       )
       if (
         result !== null &&

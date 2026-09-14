@@ -22,7 +22,9 @@ function asNumber(value: unknown): number | undefined {
 
 /** Read OpenAI (`prompt_tokens`) or Anthropic (`input_tokens`) usage from a raw response. */
 export function readUsage(raw: unknown): { inputTokens: number; outputTokens: number } | undefined {
-  const usage = asRecord(asRecord(raw)?.["usage"])
+  const root = asRecord(raw)
+  const usage =
+    asRecord(root?.["usage"]) ?? asRecord(asRecord(root?.["message"])?.["usage"])
   if (!usage) {
     return undefined
   }
@@ -54,5 +56,33 @@ export function addUsage(
     outputTokens,
     totalTokens: inputTokens + outputTokens,
     attempts: total.attempts + 1,
+  }
+}
+
+/**
+ * Merge usage from a stream chunk. OpenAI sends full totals on the last
+ * chunk; Anthropic sends input on message_start and cumulative output on
+ * message_delta. Do not increment attempts per chunk.
+ */
+export function mergeChunkUsage(total: TokenUsage, raw: unknown): TokenUsage {
+  const next = readUsage(raw)
+  if (!next) {
+    return total
+  }
+  const inputTokens = Math.max(total.inputTokens, next.inputTokens)
+  const outputTokens = Math.max(total.outputTokens, next.outputTokens)
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    attempts: total.attempts,
+  }
+}
+
+export function finishStreamUsage(total: TokenUsage): TokenUsage {
+  return {
+    ...total,
+    attempts: 1,
+    totalTokens: total.inputTokens + total.outputTokens,
   }
 }

@@ -1,6 +1,6 @@
 {
-  "name": "rubric",
-  "version": "0.0.0",
+  "name": "@tomnio/rubric",
+  "version": "0.4.0",
   "description": "Schema-first structured extraction from LLMs",
   "type": "module",
   "main": "./dist/index.js",
@@ -16,6 +16,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "pnpm test && pnpm build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -29,6 +30,18 @@
   },
   "packageManager": "pnpm@10.28.2",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomnio/rubric.git"
+  },
+  "homepage": "https://github.com/tomnio/rubric#readme",
+  "bugs": {
+    "url": "https://github.com/tomnio/rubric/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "peerDependencies": {
     "@anthropic-ai/sdk": ">=0.39.0",
     "openai": ">=4.0.0",

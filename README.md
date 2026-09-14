@@ -7,7 +7,7 @@ You define a Zod schema. Rubric puts that schema on the request, pulls JSON out 
 ```ts
 import OpenAI from "openai"
 import { z } from "zod"
-import { wrap } from "rubric"
+import { wrap } from "@tomnio/rubric"
 
 const User = z.object({
   name: z.string(),
@@ -48,6 +48,18 @@ Not included: a provider router, CLI, batch jobs, cache, or extra vendors.
 Requires Node 20+ and [pnpm](https://pnpm.io).
 
 ```bash
+pnpm add @tomnio/rubric
+pnpm add zod
+# optional, depending on the provider:
+pnpm add openai
+pnpm add @anthropic-ai/sdk
+```
+
+`zod` is required. `openai` / `@anthropic-ai/sdk` are optional peers.
+
+From a clone (development):
+
+```bash
 git clone git@github.com:tomnio/rubric.git
 cd rubric
 pnpm install
@@ -56,9 +68,9 @@ pnpm test
 pnpm build
 ```
 
-Pull requests and pushes to `main` run the same `typecheck` and `test` commands in GitHub Actions. Live examples are not part of CI.
+Pull requests and pushes to `main` run `typecheck`, `test`, and `build` in GitHub Actions. Live examples are not part of CI.
 
-Live extract (not in CI):
+Live extract from a clone (not in CI):
 
 ```bash
 cp .env.example .env   # then set OPENAI_API_KEY
@@ -70,29 +82,13 @@ ANTHROPIC_API_KEY=... IMAGE_URL=https://... pnpm example:extract-image-anthropic
 
 Optional: `OPENAI_MODEL` (default `gpt-5.6-luna`), `ANTHROPIC_MODEL` (default `claude-sonnet-4-6`).
 
-This repo is not published to npm yet. Build the package, then depend on the folder:
-
-```bash
-pnpm build
-```
-
-```json
-{
-  "dependencies": {
-    "rubric": "file:../rubric"
-  }
-}
-```
-
-`pnpm build` writes `dist/` (`index.js` + `.d.ts`). You do not need `tsx` to load the library.
-
 ## Usage
 
 ### Wrap a client
 
 ```ts
 import OpenAI from "openai"
-import { wrap } from "rubric"
+import { wrap } from "@tomnio/rubric"
 
 const client = wrap(new OpenAI(), {
   mode: "TOOLS",       // default
@@ -146,7 +142,7 @@ const user = await client.create({
 ### Maybe, refine, hooks
 
 ```ts
-import { maybe } from "rubric"
+import { maybe } from "@tomnio/rubric"
 
 const value = await client.create({
   model: "gpt-5.6-luna",
@@ -190,7 +186,7 @@ OpenAI-shaped chunks (`delta.content` / tool `arguments`) and Anthropic `input_j
 ### Images
 
 ```ts
-import { imageUrl } from "rubric"
+import { imageUrl } from "@tomnio/rubric"
 
 await client.create({
   model: "gpt-5.6-luna",

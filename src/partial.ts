@@ -1,6 +1,7 @@
 import type { z } from "zod"
 import { JsonParseError } from "./errors.js"
 import { handlerFor } from "./modes/registry.js"
+import { applyRequestExtras } from "./request.js"
 import { coerceParsedValue, deepPartialZod } from "./schema.js"
 import { parseIncomplete } from "./stream-json.js"
 import type {
@@ -30,10 +31,13 @@ export async function* extractPartial<T extends z.ZodType>(
 
   const hooks: Hooks = { ...defaults?.hooks, ...params.hooks }
   const handler = handlerFor(mode)
-  const kwargs = handler.prepareRequest(params.schema, {
-    model: params.model,
-    messages: params.messages,
-  })
+  const kwargs = applyRequestExtras(
+    handler.prepareRequest(params.schema, {
+      model: params.model,
+      messages: params.messages,
+    }),
+    params,
+  )
   const partialSchema = deepPartialZod(params.schema)
   let buffer = ""
   let lastSerialized = ""

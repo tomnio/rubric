@@ -3,7 +3,12 @@ import type { JsonParseError, SchemaValidationError } from "./errors.js"
 import type { TokenUsage } from "./usage.js"
 
 /** Request encoding used to send the schema and read JSON back. */
-export type Mode = "TOOLS" | "JSON_SCHEMA" | "MD_JSON" | "ANTHROPIC_TOOLS"
+export type Mode =
+  | "TOOLS"
+  | "JSON_SCHEMA"
+  | "MD_JSON"
+  | "ANTHROPIC_TOOLS"
+  | "GEMINI_JSON"
 
 export type CallOptions = {
   signal?: AbortSignal
@@ -34,6 +39,9 @@ export type RequestKwargs = {
   stream_options?: unknown
   temperature?: number
   top_p?: number
+  contents?: unknown
+  config?: unknown
+  systemInstruction?: unknown
 }
 
 export type ToolCall = {

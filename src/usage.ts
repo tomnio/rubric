@@ -24,14 +24,20 @@ function asNumber(value: unknown): number | undefined {
 export function readUsage(raw: unknown): { inputTokens: number; outputTokens: number } | undefined {
   const root = asRecord(raw)
   const usage =
-    asRecord(root?.["usage"]) ?? asRecord(asRecord(root?.["message"])?.["usage"])
+    asRecord(root?.["usage"]) ??
+    asRecord(asRecord(root?.["message"])?.["usage"]) ??
+    asRecord(root?.["usageMetadata"])
   if (!usage) {
     return undefined
   }
   const inputTokens =
-    asNumber(usage["prompt_tokens"]) ?? asNumber(usage["input_tokens"])
+    asNumber(usage["prompt_tokens"]) ??
+    asNumber(usage["input_tokens"]) ??
+    asNumber(usage["promptTokenCount"])
   const outputTokens =
-    asNumber(usage["completion_tokens"]) ?? asNumber(usage["output_tokens"])
+    asNumber(usage["completion_tokens"]) ??
+    asNumber(usage["output_tokens"]) ??
+    asNumber(usage["candidatesTokenCount"])
   if (inputTokens === undefined && outputTokens === undefined) {
     return undefined
   }

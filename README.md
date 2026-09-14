@@ -32,8 +32,9 @@ const user = await client.create({
 |---|---|
 | **Extract** | `create()` → `z.infer<typeof schema>` or a typed error |
 | **Reask** | JSON / schema / `.refine()` failures go back to the model (`maxRetries`, default 3) |
-| **Modes** | `TOOLS` (default), `JSON_SCHEMA`, `MD_JSON`, `ANTHROPIC_TOOLS` |
-| **Clients** | Fake `LLMClient`, OpenAI `chat.completions`, Anthropic `messages` |
+| **Modes** | `TOOLS` (default), `JSON_SCHEMA`, `MD_JSON`, `ANTHROPIC_TOOLS`, `GEMINI_JSON` |
+| **Clients** | Fake `LLMClient`, OpenAI `chat.completions`, Anthropic `messages`, Gemini `models.generateContent` |
+| **Compatible** | `compatible.deepseek` / `groq` / `openrouter` / `together` / `moonshot` (`baseURL` + OpenAI SDK) |
 | **Lists** | `z.array(...)`; root arrays are sent as `{ items: T[] }` |
 | **Zod extras** | `z.union` / `z.discriminatedUnion`, `z.record`, `z.date()` (ISO strings) |
 | **Maybe** | `maybe(User)` → `{ result, error, message }` instead of throwing on a miss |
@@ -100,7 +101,24 @@ const client = wrap(new OpenAI(), {
 })
 ```
 
-OpenAI-shaped `chat.completions.create` is enough; the official SDK is optional. An Anthropic-shaped `messages.create` defaults to `ANTHROPIC_TOOLS`.
+OpenAI-shaped `chat.completions.create` is enough; the official SDK is optional. An Anthropic-shaped `messages.create` defaults to `ANTHROPIC_TOOLS`. A Gemini `models.generateContent` client defaults to `GEMINI_JSON`.
+
+OpenAI-compatible vendors (DeepSeek, Groq, OpenRouter, Together, Moonshot) use the OpenAI SDK and a `baseURL` from `compatible`:
+
+```ts
+import OpenAI from "openai"
+import { compatible, wrap } from "@tomnio/rubric"
+
+const client = wrap(
+  new OpenAI({
+    apiKey: process.env.DEEPSEEK_API_KEY,
+    baseURL: compatible.deepseek.baseURL,
+  }),
+  { mode: compatible.deepseek.mode },
+)
+```
+
+Thinking models on those gateways may reject `TOOLS`; use `MD_JSON`. `OPENAI_BASE_URL` must be the `/v1` root, not `.../chat/completions`.
 
 Tests inject a fake:
 
@@ -138,6 +156,7 @@ const user = await client.create({
 | `JSON_SCHEMA` | `response_format.json_schema` | `message.content` |
 | `MD_JSON` | system prompt + markdown fence | fenced JSON, else raw content |
 | `ANTHROPIC_TOOLS` | `input_schema` + `tool_choice` | `content[].tool_use.input` |
+| `GEMINI_JSON` | `config.responseJsonSchema` | `text` or `candidates[].content.parts` |
 
 `JSON_SCHEMA` always sends OpenAI `strict: true`. That subset is **not** Zod `.optional()`: every property must be listed in `required`, and open maps are rejected. Rubric fails **locally** in `prepareRequest` if the schema is not strict-safe (`.optional()` keys, `z.record`, non-nullable unions). Use `.nullable()` (key present, value may be `null`), or switch to `TOOLS` / `MD_JSON`. See [#23](https://github.com/tomnio/rubric/issues/23).
 

@@ -1,5 +1,6 @@
 import type { Mode } from "../types.js"
 import { anthropicToolsHandler } from "./anthropic-tools.js"
+import { geminiJsonHandler } from "./gemini-json.js"
 import { jsonSchemaHandler } from "./json-schema.js"
 import { mdJsonHandler } from "./md-json.js"
 import { toolsHandler } from "./tools.js"
@@ -15,5 +16,7 @@ export function handlerFor(mode: Mode): ModeHandler {
       return mdJsonHandler
     case "ANTHROPIC_TOOLS":
       return anthropicToolsHandler
+    case "GEMINI_JSON":
+      return geminiJsonHandler
   }
 }

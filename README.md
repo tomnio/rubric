@@ -50,13 +50,14 @@ Requires Node 20+ and [pnpm](https://pnpm.io).
 
 ```bash
 pnpm add @tomnio/rubric
-pnpm add zod
+pnpm add zod@^3.24.0
 # optional, depending on the provider:
 pnpm add openai
 pnpm add @anthropic-ai/sdk
+pnpm add @google/genai
 ```
 
-`zod` is required. `openai` / `@anthropic-ai/sdk` are optional peers.
+`zod` is required and must be **3.x** (`^3.24.0` or `3.25.x`). Bare `pnpm add zod` currently installs Zod 4, which does not satisfy the peer range. `openai` / `@anthropic-ai/sdk` / `@google/genai` are optional peers.
 
 From a clone (development):
 
@@ -118,7 +119,18 @@ const client = wrap(
 )
 ```
 
-Thinking models on those gateways may reject `TOOLS`; use `MD_JSON`. `OPENAI_BASE_URL` must be the `/v1` root, not `.../chat/completions`.
+Pass `baseURL` as the **`/v1` root**. The OpenAI SDK appends `/chat/completions` itself.
+
+```ts
+new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://gateway.example.com/v1",
+})
+```
+
+Do **not** paste the full chat-completions URL from a vendor dashboard (`.../v1/chat/completions`). That becomes `.../v1/chat/completions/chat/completions` and typically returns **404** with an empty body.
+
+Thinking / reasoning models (for example some DeepSeek flash variants) often reject forced `tool_choice` (`400 Thinking mode does not support this tool_choice`). Use `mode: "MD_JSON"` or a non-thinking model with `TOOLS`. Do not assume the gateway supports `JSON_SCHEMA`.
 
 Tests inject a fake:
 

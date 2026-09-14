@@ -18,7 +18,16 @@ if (!apiKey) {
   process.exit(1)
 }
 
-const client = wrap(new OpenAI({ apiKey }), { mode: "TOOLS" })
+const baseURL = process.env["OPENAI_BASE_URL"]
+const mode = (process.env["OPENAI_MODE"] ?? "TOOLS") as
+  | "TOOLS"
+  | "JSON_SCHEMA"
+  | "MD_JSON"
+
+const openai = baseURL
+  ? new OpenAI({ apiKey, baseURL })
+  : new OpenAI({ apiKey })
+const client = wrap(openai, { mode })
 
 const user = await client.create({
   model: process.env["OPENAI_MODEL"] ?? "gpt-5.6-luna",

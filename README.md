@@ -70,6 +70,8 @@ pnpm build
 
 Pull requests and pushes to `main` run `typecheck`, `test`, and `build` in GitHub Actions. Live examples are not part of CI.
 
+Releases: bump `package.json` `version` on `main`, tag `vX.Y.Z` (same number), then npm. Details in [RELEASE.md](RELEASE.md).
+
 Live extract from a clone (not in CI):
 
 ```bash

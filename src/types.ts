@@ -5,10 +5,20 @@ import type { TokenUsage } from "./usage.js"
 /** Request encoding used to send the schema and read JSON back. */
 export type Mode = "TOOLS" | "JSON_SCHEMA" | "MD_JSON" | "ANTHROPIC_TOOLS"
 
+export type CallOptions = {
+  signal?: AbortSignal
+}
+
 /** Minimal chat-completions surface. Tests inject a fake; a live adapter comes later. */
 export type LLMClient = {
-  chatCompletionsCreate(kwargs: RequestKwargs): Promise<unknown>
-  chatCompletionsStream?: (kwargs: RequestKwargs) => AsyncIterable<unknown>
+  chatCompletionsCreate(
+    kwargs: RequestKwargs,
+    options?: CallOptions,
+  ): Promise<unknown>
+  chatCompletionsStream?: (
+    kwargs: RequestKwargs,
+    options?: CallOptions,
+  ) => AsyncIterable<unknown>
 }
 
 /** Arguments passed to the LLM client. Modes add tools / response_format. */
@@ -95,6 +105,7 @@ export type CreateParams<T extends z.ZodType> = {
   temperature?: number
   max_tokens?: number
   top_p?: number
+  signal?: AbortSignal
 }
 
 export type DeepPartial<T> = T extends (infer U)[]

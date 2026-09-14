@@ -124,6 +124,7 @@ const user = await client.create({
   temperature: 0,
   max_tokens: 1024,
   top_p: 1,
+  signal: AbortSignal.timeout(10_000),
 })
 ```
 

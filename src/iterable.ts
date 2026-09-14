@@ -39,7 +39,11 @@ export async function* extractIterable<T extends z.ZodType>(
   let yielded = 0
   let usage = emptyUsage()
 
-  for await (const chunk of client.chatCompletionsStream(kwargs)) {
+  params.signal?.throwIfAborted()
+  for await (const chunk of client.chatCompletionsStream(
+    kwargs,
+    params.signal ? { signal: params.signal } : undefined,
+  )) {
     usage = mergeChunkUsage(usage, chunk)
     buffer += handler.deltaFromChunk(chunk)
     const json = coerceParsedValue(arraySchema, parseIncomplete(buffer))

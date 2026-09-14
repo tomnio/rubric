@@ -1,10 +1,10 @@
-import type { LLMClient, RequestKwargs } from "../types.js"
+import type { CallOptions, LLMClient, RequestKwargs } from "../types.js"
 
 /** Duck-typed OpenAI chat client. Avoids a hard runtime dependency on `openai`. */
 export type OpenAIChatClient = {
   chat: {
     completions: {
-      create: (body: unknown) => Promise<unknown>
+      create: (body: unknown, options?: CallOptions) => Promise<unknown>
     }
   }
 }
@@ -33,18 +33,32 @@ export function isOpenAIChatClient(client: unknown): client is OpenAIChatClient 
   return typeof (completions as { create?: unknown }).create === "function"
 }
 
+function createOptions(options?: CallOptions): CallOptions | undefined {
+  if (options?.signal) {
+    return { signal: options.signal }
+  }
+  return undefined
+}
+
 export function fromOpenAI(client: OpenAIChatClient): LLMClient {
   return {
-    chatCompletionsCreate(kwargs: RequestKwargs) {
-      return client.chat.completions.create(kwargs)
+    chatCompletionsCreate(kwargs: RequestKwargs, options?: CallOptions) {
+      const opts = createOptions(options)
+      return opts
+        ? client.chat.completions.create(kwargs, opts)
+        : client.chat.completions.create(kwargs)
     },
-    async *chatCompletionsStream(kwargs: RequestKwargs) {
+    async *chatCompletionsStream(kwargs: RequestKwargs, options?: CallOptions) {
+      const body = {
+        ...kwargs,
+        stream: true,
+        stream_options: kwargs.stream_options ?? { include_usage: true },
+      }
+      const opts = createOptions(options)
       const result = await Promise.resolve(
-        client.chat.completions.create({
-          ...kwargs,
-          stream: true,
-          stream_options: kwargs.stream_options ?? { include_usage: true },
-        }),
+        opts
+          ? client.chat.completions.create(body, opts)
+          : client.chat.completions.create(body),
       )
       if (
         result !== null &&

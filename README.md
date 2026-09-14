@@ -97,6 +97,8 @@ import { wrap } from "rubric"
 const client = wrap(new OpenAI(), {
   mode: "TOOLS",       // default
   maxRetries: 3,       // extra attempts after the first
+  temperature: 0,
+  max_tokens: 1024,
 })
 ```
 

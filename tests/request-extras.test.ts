@@ -109,4 +109,35 @@ describe("request extras", () => {
 
     expect(capture[0]?.max_tokens).toBe(50)
   })
+
+  it("uses wrap() sampling defaults and lets create() override", async () => {
+    const capture: RequestKwargs[] = []
+    const client = wrap(
+      {
+        async chatCompletionsCreate(kwargs) {
+          capture.push(kwargs)
+          return toolResponse({ name: "John", age: 25 })
+        },
+      } satisfies LLMClient,
+      { temperature: 0, max_tokens: 128, top_p: 1 },
+    )
+
+    await client.create({
+      model: "test-model",
+      schema: User,
+      messages: [{ role: "user", content: "John is 25" }],
+    })
+    expect(capture[0]?.temperature).toBe(0)
+    expect(capture[0]?.max_tokens).toBe(128)
+    expect(capture[0]?.top_p).toBe(1)
+
+    await client.create({
+      model: "test-model",
+      schema: User,
+      messages: [{ role: "user", content: "John is 25" }],
+      temperature: 0.7,
+    })
+    expect(capture[1]?.temperature).toBe(0.7)
+    expect(capture[1]?.max_tokens).toBe(128)
+  })
 })

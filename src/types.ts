@@ -87,7 +87,13 @@ export type Hooks = {
   onUsage?: (usage: TokenUsage) => void
 }
 
-export type WrapOptions = {
+export type SamplingExtras = {
+  temperature?: number
+  max_tokens?: number
+  top_p?: number
+}
+
+export type WrapOptions = SamplingExtras & {
   /** Default mode for create(). Default: "TOOLS" */
   mode?: Mode
   /** Extra attempts after the first. Default: 3 */
@@ -95,16 +101,13 @@ export type WrapOptions = {
   hooks?: Hooks
 }
 
-export type CreateParams<T extends z.ZodType> = {
+export type CreateParams<T extends z.ZodType> = SamplingExtras & {
   model: string
   messages: Message[]
   schema: T
   maxRetries?: number
   mode?: Mode
   hooks?: Hooks
-  temperature?: number
-  max_tokens?: number
-  top_p?: number
   signal?: AbortSignal
 }
 

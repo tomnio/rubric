@@ -27,6 +27,7 @@ export type {
   Mode,
   RequestKwargs,
   RubricClient,
+  SamplingExtras,
   ToolCall,
   WrapOptions,
 } from "./types.js"

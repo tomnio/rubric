@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { JsonParseError } from "./errors.js"
 import { handlerFor } from "./modes/registry.js"
-import { applyRequestExtras } from "./request.js"
+import { applyRequestExtras, mergeSamplingExtras } from "./request.js"
 import { coerceParsedValue } from "./schema.js"
 import { parseIncomplete } from "./stream-json.js"
 import type { CreateParams, Hooks, LLMClient, Mode, WrapOptions } from "./types.js"
@@ -33,7 +33,7 @@ export async function* extractIterable<T extends z.ZodType>(
       model: params.model,
       messages: params.messages,
     }),
-    params,
+    mergeSamplingExtras(defaults, params),
   )
   let buffer = ""
   let yielded = 0

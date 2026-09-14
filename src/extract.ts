@@ -37,7 +37,11 @@ export async function extract<T extends z.ZodType>(
   while (attempts < attemptsAllowed) {
     attempts += 1
     hooks.onRequest?.(kwargs)
-    const raw = await client.chatCompletionsCreate(kwargs)
+    params.signal?.throwIfAborted()
+    const raw = await client.chatCompletionsCreate(
+      kwargs,
+      params.signal ? { signal: params.signal } : undefined,
+    )
     usage = addUsage(usage, raw)
 
     try {

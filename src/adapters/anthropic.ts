@@ -1,9 +1,9 @@
-import type { LLMClient, RequestKwargs } from "../types.js"
+import type { CallOptions, LLMClient, RequestKwargs } from "../types.js"
 
 /** Duck-typed Anthropic messages client. No hard dependency on the SDK. */
 export type AnthropicMessagesClient = {
   messages: {
-    create: (body: unknown) => Promise<unknown>
+    create: (body: unknown, options?: CallOptions) => Promise<unknown>
   }
 }
 
@@ -22,12 +22,17 @@ export function isAnthropicMessagesClient(
 
 export function fromAnthropic(client: AnthropicMessagesClient): LLMClient {
   return {
-    chatCompletionsCreate(kwargs: RequestKwargs) {
-      return client.messages.create(kwargs)
+    chatCompletionsCreate(kwargs: RequestKwargs, options?: CallOptions) {
+      return options?.signal
+        ? client.messages.create(kwargs, { signal: options.signal })
+        : client.messages.create(kwargs)
     },
-    async *chatCompletionsStream(kwargs: RequestKwargs) {
+    async *chatCompletionsStream(kwargs: RequestKwargs, options?: CallOptions) {
+      const body = { ...kwargs, stream: true }
       const result = await Promise.resolve(
-        client.messages.create({ ...kwargs, stream: true }),
+        options?.signal
+          ? client.messages.create(body, { signal: options.signal })
+          : client.messages.create(body),
       )
       if (
         result !== null &&

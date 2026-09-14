@@ -15,6 +15,7 @@ import { extractPartial } from "./partial.js"
 import type { LLMClient, RubricClient, WrapOptions } from "./types.js"
 
 export type {
+  CallOptions,
   ContentBlock,
   CreateParams,
   DeepPartial,

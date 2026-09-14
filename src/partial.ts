@@ -43,7 +43,11 @@ export async function* extractPartial<T extends z.ZodType>(
   let lastSerialized = ""
   let usage = emptyUsage()
 
-  for await (const chunk of client.chatCompletionsStream(kwargs)) {
+  params.signal?.throwIfAborted()
+  for await (const chunk of client.chatCompletionsStream(
+    kwargs,
+    params.signal ? { signal: params.signal } : undefined,
+  )) {
     usage = mergeChunkUsage(usage, chunk)
     buffer += handler.deltaFromChunk(chunk)
     const json = coerceParsedValue(params.schema, parseIncomplete(buffer))

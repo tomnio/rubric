@@ -160,4 +160,85 @@ describe("token usage", () => {
       attempts: 1,
     })
   })
+
+  it("reports OpenAI stream usage from the last chunk", async () => {
+    const onUsage = vi.fn()
+    const client = wrap(
+      {
+        async chatCompletionsCreate() {
+          throw new Error("create should not be called")
+        },
+        async *chatCompletionsStream() {
+          yield {
+            choices: [{ delta: { content: '{"name":"John","age":25}' } }],
+          }
+          yield {
+            choices: [],
+            usage: { prompt_tokens: 12, completion_tokens: 8 },
+          }
+        },
+      },
+      { mode: "JSON_SCHEMA", hooks: { onUsage } },
+    )
+    const snapshots: unknown[] = []
+    for await (const snap of client.createPartial({
+      model: "test-model",
+      schema: User,
+      messages: [{ role: "user", content: "John is 25" }],
+    })) {
+      snapshots.push(snap)
+    }
+    expect(snapshots.at(-1)).toEqual({ name: "John", age: 25 })
+    expect(onUsage).toHaveBeenCalledWith({
+      inputTokens: 12,
+      outputTokens: 8,
+      totalTokens: 20,
+      attempts: 1,
+    })
+  })
+
+  it("merges Anthropic message_start and message_delta usage on iterable", async () => {
+    const onUsage = vi.fn()
+    const client = wrap(
+      {
+        async chatCompletionsCreate() {
+          throw new Error("create should not be called")
+        },
+        async *chatCompletionsStream() {
+          yield {
+            type: "message_start",
+            message: { usage: { input_tokens: 15, output_tokens: 0 } },
+          }
+          yield {
+            type: "content_block_delta",
+            delta: {
+              type: "input_json_delta",
+              partial_json:
+                '{"items":[{"name":"John","age":25},{"name":"Jane","age":30}]}',
+            },
+          }
+          yield {
+            type: "message_delta",
+            usage: { output_tokens: 9 },
+          }
+        },
+      },
+      { mode: "ANTHROPIC_TOOLS", hooks: { onUsage } },
+    )
+    const items: unknown[] = []
+    for await (const item of client.createIterable({
+      model: "test-model",
+      schema: User,
+      messages: [{ role: "user", content: "John and Jane" }],
+    })) {
+      items.push(item)
+    }
+    expect(items).toHaveLength(2)
+    expect(onUsage).toHaveBeenCalledWith({
+      inputTokens: 15,
+      outputTokens: 9,
+      totalTokens: 24,
+      attempts: 1,
+    })
+  })
 })

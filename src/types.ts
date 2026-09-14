@@ -21,6 +21,7 @@ export type RequestKwargs = {
   max_tokens?: number
   system?: string
   stream?: boolean
+  stream_options?: unknown
 }
 
 export type ToolCall = {

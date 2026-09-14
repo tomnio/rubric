@@ -3,7 +3,8 @@ import { JsonParseError } from "./errors.js"
 import { handlerFor } from "./modes/registry.js"
 import { coerceParsedValue } from "./schema.js"
 import { parseIncomplete } from "./stream-json.js"
-import type { CreateParams, LLMClient, Mode, WrapOptions } from "./types.js"
+import type { CreateParams, Hooks, LLMClient, Mode, WrapOptions } from "./types.js"
+import { emptyUsage, finishStreamUsage, mergeChunkUsage } from "./usage.js"
 
 const DEFAULT_MODE: Mode = "TOOLS"
 
@@ -23,6 +24,7 @@ export async function* extractIterable<T extends z.ZodType>(
     throw new Error("LLMClient does not implement chatCompletionsStream")
   }
 
+  const hooks: Hooks = { ...defaults?.hooks, ...params.hooks }
   const arraySchema = z.array(params.schema)
   const handler = handlerFor(mode)
   const kwargs = handler.prepareRequest(arraySchema, {
@@ -31,8 +33,10 @@ export async function* extractIterable<T extends z.ZodType>(
   })
   let buffer = ""
   let yielded = 0
+  let usage = emptyUsage()
 
   for await (const chunk of client.chatCompletionsStream(kwargs)) {
+    usage = mergeChunkUsage(usage, chunk)
     buffer += handler.deltaFromChunk(chunk)
     const json = coerceParsedValue(arraySchema, parseIncomplete(buffer))
     if (!Array.isArray(json)) {
@@ -49,6 +53,7 @@ export async function* extractIterable<T extends z.ZodType>(
     }
   }
 
+  hooks.onUsage?.(finishStreamUsage(usage))
   if (yielded === 0) {
     throw new JsonParseError("Stream ended without a complete list item", buffer)
   }

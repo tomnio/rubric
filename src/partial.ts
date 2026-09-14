@@ -6,10 +6,12 @@ import { parseIncomplete } from "./stream-json.js"
 import type {
   CreateParams,
   DeepPartial,
+  Hooks,
   LLMClient,
   Mode,
   WrapOptions,
 } from "./types.js"
+import { emptyUsage, finishStreamUsage, mergeChunkUsage } from "./usage.js"
 
 const DEFAULT_MODE: Mode = "TOOLS"
 
@@ -26,6 +28,7 @@ export async function* extractPartial<T extends z.ZodType>(
     throw new Error("LLMClient does not implement chatCompletionsStream")
   }
 
+  const hooks: Hooks = { ...defaults?.hooks, ...params.hooks }
   const handler = handlerFor(mode)
   const kwargs = handler.prepareRequest(params.schema, {
     model: params.model,
@@ -34,8 +37,10 @@ export async function* extractPartial<T extends z.ZodType>(
   const partialSchema = deepPartialZod(params.schema)
   let buffer = ""
   let lastSerialized = ""
+  let usage = emptyUsage()
 
   for await (const chunk of client.chatCompletionsStream(kwargs)) {
+    usage = mergeChunkUsage(usage, chunk)
     buffer += handler.deltaFromChunk(chunk)
     const json = coerceParsedValue(params.schema, parseIncomplete(buffer))
     if (json === undefined) {
@@ -53,6 +58,7 @@ export async function* extractPartial<T extends z.ZodType>(
     yield parsed.data as DeepPartial<z.infer<T>>
   }
 
+  hooks.onUsage?.(finishStreamUsage(usage))
   if (lastSerialized === "") {
     throw new JsonParseError("Stream ended without parseable JSON", buffer)
   }

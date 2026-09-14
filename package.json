@@ -60,6 +60,7 @@
     }
   },
   "devDependencies": {
+    "@google/genai": "^1.0.0",
     "@anthropic-ai/sdk": "^0.125.0",
     "@types/node": "^20.19.43",
     "openai": "^4.104.0",

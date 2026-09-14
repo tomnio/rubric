@@ -33,8 +33,7 @@ const user = await client.create({
 | **Extract** | `create()` → `z.infer<typeof schema>` or a typed error |
 | **Reask** | JSON / schema / `.refine()` failures go back to the model (`maxRetries`, default 3) |
 | **Modes** | `TOOLS` (default), `JSON_SCHEMA`, `MD_JSON`, `ANTHROPIC_TOOLS`, `GEMINI_JSON` |
-| **Clients** | Fake `LLMClient`, OpenAI `chat.completions`, Anthropic `messages`, Gemini `models.generateContent` |
-| **Compatible** | `compatible.deepseek` / `groq` / `openrouter` / `together` / `moonshot` (`baseURL` + OpenAI SDK) |
+| **Clients** | OpenAI, Anthropic, Gemini, plus OpenAI-compatible gateways via `compatible` |
 | **Lists** | `z.array(...)`; root arrays are sent as `{ items: T[] }` |
 | **Zod extras** | `z.union` / `z.discriminatedUnion`, `z.record`, `z.date()` (ISO strings) |
 | **Maybe** | `maybe(User)` → `{ result, error, message }` instead of throwing on a miss |
@@ -42,7 +41,7 @@ const user = await client.create({
 | **Stream** | `createPartial()` incomplete objects; `createIterable()` complete list items |
 | **Images** | `imageUrl(url)` in `messages[].content` (Anthropic maps these to `image` / `source`) |
 
-Not included: a provider router, CLI, batch jobs, cache, or extra vendors.
+Not included: a `from_provider("vendor/model")` router, CLI, batch jobs, or cache.
 
 ## Quick start
 
@@ -86,6 +85,60 @@ ANTHROPIC_API_KEY=... IMAGE_URL=https://... pnpm example:extract-image-anthropic
 
 Optional: `OPENAI_MODEL` (default `gpt-5.6-luna`), `ANTHROPIC_MODEL` (default `claude-sonnet-4-6`).
 
+## Providers
+
+`wrap()` inspects the client shape. It does not patch the SDK.
+
+| Provider | Install | How to wrap | Default mode |
+|---|---|---|---|
+| OpenAI | `openai` | `wrap(new OpenAI())` | `TOOLS` |
+| Anthropic | `@anthropic-ai/sdk` | `wrap(new Anthropic())` | `ANTHROPIC_TOOLS` |
+| Google Gemini | `@google/genai` | `wrap(new GoogleGenAI({ apiKey }))` | `GEMINI_JSON` |
+| DeepSeek, Groq, OpenRouter, Together, Moonshot | `openai` | `wrap(new OpenAI({ baseURL: compatible.<id>.baseURL }))` | `TOOLS` (see `compatible`) |
+| Any OpenAI-compatible gateway | `openai` | `wrap(new OpenAI({ apiKey, baseURL }))` | `TOOLS` |
+
+```ts
+import Anthropic from "@anthropic-ai/sdk"
+import { GoogleGenAI } from "@google/genai"
+import OpenAI from "openai"
+import { compatible, wrap } from "@tomnio/rubric"
+
+wrap(new OpenAI())
+wrap(new Anthropic())
+wrap(new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }))
+
+wrap(
+  new OpenAI({
+    apiKey: process.env.DEEPSEEK_API_KEY,
+    baseURL: compatible.deepseek.baseURL,
+  }),
+  { mode: compatible.deepseek.mode },
+)
+```
+
+`compatible` base URLs:
+
+| Key | `baseURL` |
+|---|---|
+| `deepseek` | `https://api.deepseek.com` |
+| `groq` | `https://api.groq.com/openai/v1` |
+| `openrouter` | `https://openrouter.ai/api/v1` |
+| `together` | `https://api.together.xyz/v1` |
+| `moonshot` | `https://api.moonshot.cn/v1` |
+
+For a custom gateway, `baseURL` must be the **`/v1` root**. The OpenAI SDK appends `/chat/completions` itself.
+
+```ts
+new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://gateway.example.com/v1",
+})
+```
+
+Do **not** paste the full chat-completions URL from a vendor dashboard (`.../v1/chat/completions`). That becomes `.../v1/chat/completions/chat/completions` and typically returns **404** with an empty body.
+
+Thinking / reasoning models (for example some DeepSeek flash variants) often reject forced `tool_choice` (`400 Thinking mode does not support this tool_choice`). Use `mode: "MD_JSON"` or a non-thinking model with `TOOLS`. Do not assume the gateway supports `JSON_SCHEMA`.
+
 ## Usage
 
 ### Wrap a client
@@ -101,36 +154,6 @@ const client = wrap(new OpenAI(), {
   max_tokens: 1024,
 })
 ```
-
-OpenAI-shaped `chat.completions.create` is enough; the official SDK is optional. An Anthropic-shaped `messages.create` defaults to `ANTHROPIC_TOOLS`. A Gemini `models.generateContent` client defaults to `GEMINI_JSON`.
-
-OpenAI-compatible vendors (DeepSeek, Groq, OpenRouter, Together, Moonshot) use the OpenAI SDK and a `baseURL` from `compatible`:
-
-```ts
-import OpenAI from "openai"
-import { compatible, wrap } from "@tomnio/rubric"
-
-const client = wrap(
-  new OpenAI({
-    apiKey: process.env.DEEPSEEK_API_KEY,
-    baseURL: compatible.deepseek.baseURL,
-  }),
-  { mode: compatible.deepseek.mode },
-)
-```
-
-Pass `baseURL` as the **`/v1` root**. The OpenAI SDK appends `/chat/completions` itself.
-
-```ts
-new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  baseURL: "https://gateway.example.com/v1",
-})
-```
-
-Do **not** paste the full chat-completions URL from a vendor dashboard (`.../v1/chat/completions`). That becomes `.../v1/chat/completions/chat/completions` and typically returns **404** with an empty body.
-
-Thinking / reasoning models (for example some DeepSeek flash variants) often reject forced `tool_choice` (`400 Thinking mode does not support this tool_choice`). Use `mode: "MD_JSON"` or a non-thinking model with `TOOLS`. Do not assume the gateway supports `JSON_SCHEMA`.
 
 Tests inject a fake:
 

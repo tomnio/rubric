@@ -22,6 +22,8 @@ export type RequestKwargs = {
   system?: string
   stream?: boolean
   stream_options?: unknown
+  temperature?: number
+  top_p?: number
 }
 
 export type ToolCall = {
@@ -90,6 +92,9 @@ export type CreateParams<T extends z.ZodType> = {
   maxRetries?: number
   mode?: Mode
   hooks?: Hooks
+  temperature?: number
+  max_tokens?: number
+  top_p?: number
 }
 
 export type DeepPartial<T> = T extends (infer U)[]

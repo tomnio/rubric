@@ -5,6 +5,7 @@ import {
   SchemaValidationError,
 } from "./errors.js"
 import { handlerFor } from "./modes/registry.js"
+import { applyRequestExtras } from "./request.js"
 import { coerceParsedValue } from "./schema.js"
 import type { CreateParams, Hooks, LLMClient, Mode, WrapOptions } from "./types.js"
 import { addUsage, emptyUsage } from "./usage.js"
@@ -22,10 +23,13 @@ export async function extract<T extends z.ZodType>(
   const hooks: Hooks = { ...defaults?.hooks, ...params.hooks }
   const attemptsAllowed = maxRetries + 1
   const handler = handlerFor(mode)
-  let kwargs = handler.prepareRequest(params.schema, {
-    model: params.model,
-    messages: params.messages,
-  })
+  let kwargs = applyRequestExtras(
+    handler.prepareRequest(params.schema, {
+      model: params.model,
+      messages: params.messages,
+    }),
+    params,
+  )
   let lastError: JsonParseError | SchemaValidationError | undefined
   let attempts = 0
   let usage = emptyUsage()

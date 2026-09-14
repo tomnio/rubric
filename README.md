@@ -121,6 +121,9 @@ const user = await client.create({
   messages: [{ role: "user", content: "John is 25 years old" }],
   maxRetries: 3,       // optional, overrides wrap()
   mode: "TOOLS",       // optional
+  temperature: 0,
+  max_tokens: 1024,
+  top_p: 1,
 })
 ```
 

@@ -1,13 +1,18 @@
 import type { CallOptions, LLMClient, RequestKwargs } from "../types.js"
 
-/** Duck-typed Google GenAI client (`models.generateContent`). */
+/**
+ * Duck-typed Google GenAI client (`models.generateContent`).
+ *
+ * The real SDK resolves `generateContentStream` to an async iterable, so the
+ * return type accepts both a promise and a bare iterable for fake clients.
+ */
 export type GeminiModelsClient = {
   models: {
     generateContent: (body: unknown, options?: CallOptions) => Promise<unknown>
     generateContentStream?: (
       body: unknown,
       options?: CallOptions,
-    ) => AsyncIterable<unknown>
+    ) => AsyncIterable<unknown> | Promise<AsyncIterable<unknown>>
   }
 }
 
@@ -61,7 +66,20 @@ export function fromGemini(client: GeminiModelsClient): LLMClient {
       if (!stream) {
         throw new Error("Gemini client does not implement generateContentStream")
       }
-      yield* stream.call(client.models, geminiBody(kwargs, options))
+      // The SDK resolves generateContentStream to an async iterable, so await
+      // the call before iterating (fake clients may return one directly).
+      const result = await Promise.resolve(
+        stream.call(client.models, geminiBody(kwargs, options)),
+      )
+      if (
+        result !== null &&
+        typeof result === "object" &&
+        Symbol.asyncIterator in result
+      ) {
+        yield* result as AsyncIterable<unknown>
+        return
+      }
+      throw new Error("Gemini stream did not return an async iterable")
     },
   }
 }

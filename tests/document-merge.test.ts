@@ -112,3 +112,53 @@ describe("mergeInto", () => {
     }
   })
 })
+
+describe("mergeInto with a non-object root", () => {
+  it("concatenates when the root is an array", () => {
+    // A root array reaches the merge as an array per chunk, not an object.
+    const data = mergeInto(z.array(z.object({ id: z.number() })), [
+      [{ id: 1 }, { id: 2 }],
+      [{ id: 3 }],
+    ])
+    expect(data).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }])
+  })
+
+  it("dedupes a root array the same way array fields do", () => {
+    const data = mergeInto(z.array(z.object({ id: z.number() })), [
+      [{ id: 1 }],
+      [{ id: 1 }],
+    ])
+    expect(data).toEqual([{ id: 1 }])
+  })
+
+  it("keeps a root array element that is null when the element allows it", () => {
+    const data = mergeInto(z.array(z.string().nullable()), [["a"], [null, "b"]])
+    expect(data).toEqual(["a", null, "b"])
+  })
+
+  it("returns an empty array when every chunk reported an empty list", () => {
+    expect(mergeInto(z.array(z.string()), [[], []])).toEqual([])
+  })
+
+  it("takes the first value when the root is a scalar", () => {
+    expect(mergeInto(z.string(), ["first", "second"])).toEqual("first")
+  })
+
+  it("keeps a Date root as a Date", () => {
+    // A Date is an object to `typeof`, so the merge cannot classify it from the
+    // runtime value alone — this is why the schema decides. Coercion from an ISO
+    // string happens earlier, in extract().
+    const first = new Date("2020-01-01T00:00:00Z")
+    const data = mergeInto(z.date(), [first, new Date("2021-06-15T00:00:00Z")])
+    expect(data).toBeInstanceOf(Date)
+    expect(data.toISOString()).toBe("2020-01-01T00:00:00.000Z")
+  })
+
+  it("preserves an explicit null for a nullable scalar root", () => {
+    expect(mergeInto(z.string().nullable(), [null, null])).toBeNull()
+  })
+
+  it("reports a schema failure rather than silently returning nothing", () => {
+    expect(() => mergeInto(z.date(), [])).toThrow(DocumentMergeError)
+  })
+})

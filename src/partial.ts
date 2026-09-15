@@ -2,6 +2,7 @@ import type { z } from "zod"
 import { rejectTokenBudgetForStream } from "./budget.js"
 import { JsonCompleteness } from "./completeness.js"
 import { JsonParseError } from "./errors.js"
+import { attemptMeta, safeEmit } from "./hooks.js"
 import { handlerFor } from "./modes/registry.js"
 import { applyRequestExtras, mergeSamplingExtras } from "./request.js"
 import { coerceParsedValue } from "./schema.js"
@@ -87,7 +88,10 @@ export async function* extractPartial<T extends z.ZodType>(
     yield built.value as DeepPartial<z.infer<T>>
   }
 
-  hooks.onUsage?.(finishStreamUsage(usage))
+  safeEmit("onUsage", hooks.onUsage, [
+    finishStreamUsage(usage),
+    attemptMeta(1, 1, true),
+  ])
   if (lastSerialized === "") {
     throw new JsonParseError("Stream ended without parseable JSON", buffer)
   }

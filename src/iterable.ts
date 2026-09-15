@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { rejectTokenBudgetForStream } from "./budget.js"
 import { JsonParseError } from "./errors.js"
+import { attemptMeta, safeEmit } from "./hooks.js"
 import { handlerFor } from "./modes/registry.js"
 import { applyRequestExtras, mergeSamplingExtras } from "./request.js"
 import { coerceParsedValue } from "./schema.js"
@@ -66,7 +67,10 @@ export async function* extractIterable<T extends z.ZodType>(
     }
   }
 
-  hooks.onUsage?.(finishStreamUsage(usage))
+  safeEmit("onUsage", hooks.onUsage, [
+    finishStreamUsage(usage),
+    attemptMeta(1, 1, true),
+  ])
   if (yielded === 0) {
     throw new JsonParseError("Stream ended without a complete list item", buffer)
   }

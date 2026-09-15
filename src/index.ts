@@ -60,6 +60,8 @@ export { compatible } from "./providers.js"
 export type { CompatibleProvider } from "./providers.js"
 export { maybe } from "./maybe.js"
 export { cited } from "./citation.js"
+export { llmRefine, Validator } from "./judge.js"
+export type { LlmRefineOptions } from "./judge.js"
 export {
   anthropicImageBase64,
   anthropicImageUrl,

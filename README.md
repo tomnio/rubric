@@ -38,6 +38,7 @@ const user = await client.create({
 | **Zod extras** | `z.union` / `z.discriminatedUnion`, `z.record`, `z.date()` (ISO strings) |
 | **Maybe** | `maybe(User)` → `{ result, error, message }` instead of throwing on a miss |
 | **Citations** | `cited(User)` + `context` verifies model quotes against the source; fakes reask |
+| **LLM judge** | `llmRefine("rule", client)` validates a field with a second model call |
 | **Hooks** | `onRequest` / `onParseError` / `onSuccess` / `onUsage` (token totals across reasks) |
 | **Stream** | `createPartial()` incomplete objects; `createIterable()` complete list items |
 | **Images** | `imageUrl(url)` in `messages[].content` (Anthropic maps these to `image` / `source`) |
@@ -223,6 +224,33 @@ const fact = await client.create({
 
 Matching is exact, or after lowercasing and collapsing whitespace runs. Without
 a `context`, the field passes through unchecked. Not supported on streaming.
+
+### LLM-as-judge
+
+`.refine()` covers rules you can write as code. For rules that are judgements —
+"the name must be a real person", "don't say objectionable things" —
+`llmRefine()` asks a second model call and turns its verdict into a Zod issue,
+so a failure reasks like any other validation error.
+
+```ts
+import { llmRefine } from "@tomnio/rubric"
+
+const Answer = z.object({
+  answer: z.string().superRefine(
+    llmRefine("don't say objectionable things", judgeClient),
+  ),
+})
+
+await client.create({ model: "gpt-4o-mini", schema: Answer, messages })
+```
+
+The judge reuses the enclosing `create()` model unless you pass `model`. The
+rule and the candidate value are sent as one JSON object, and the system prompt
+tells the judge to treat both as data. A judge call that itself fails (network,
+unparseable verdict) propagates as an error rather than reasking.
+
+This is why `create()` parses with `safeParseAsync`: a judge refinement is
+async, and Zod throws if an async refinement runs during a synchronous parse.
 
 ### Maybe, refine, hooks
 

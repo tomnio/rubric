@@ -43,7 +43,7 @@ const user = await client.create({
 | **Token budget** | `tokenBudget` caps cumulative tokens; the loop stops instead of reasking |
 | **Stream** | `createPartial()` incomplete objects (closed subtrees validated); `createIterable()` complete list items |
 | **Images** | `imageUrl(url)` in `messages[].content` (Anthropic maps these to `image` / `source`) |
-| **Documents** | `createDocument()` splits a long text, extracts per chunk, and merges — `@tomnio/rubric/document` (unreleased; see [Quick start](#quick-start)) |
+| **Documents** | `createDocument()` splits a long text, extracts per chunk, and merges — `@tomnio/rubric/document` |
 
 Not included: a `from_provider("vendor/model")` router, CLI, batch jobs, or cache.
 
@@ -62,17 +62,10 @@ pnpm add @google/genai
 
 `zod` is required and must be **3.x** (`^3.24.0` or `3.25.x`). Bare `pnpm add zod` currently installs Zod 4, which does not satisfy the peer range. `openai` / `@anthropic-ai/sdk` / `@google/genai` are optional peers.
 
-> **The `./document` entry point is not published yet.** The latest release
-> (`0.6.0`) exports only the root import, so `import "@tomnio/rubric/document"`
-> fails with `ERR_PACKAGE_PATH_NOT_EXPORTED` for an npm install. `create()` works
-> from npm today; `createDocument()` needs a build of `main`:
+The `./document` entry point needs one more optional peer — the WASM chunker. It is a separate import, so `create()` does not pull it in:
 
 ```bash
-git clone git@github.com:tomnio/rubric.git
-cd rubric
-pnpm install
-pnpm build
-pnpm add /path/to/rubric    # in your own project
+pnpm add @chonkiejs/core   # only for createDocument()
 ```
 
 From a clone (development):
@@ -391,12 +384,6 @@ await client.create({
 
 ```bash
 pnpm add @chonkiejs/core   # optional, only needed for createDocument()
-```
-
-`createDocument()` is **not in the published package yet** — the latest release exports only the root import. Use a build of `main` (see [Quick start](#quick-start)); once a release includes it, the import is:
-
-```ts
-import { createDocument } from "@tomnio/rubric/document"
 ```
 
 Full working example: [`examples/extract-document.ts`](examples/extract-document.ts) (`pnpm example:extract-document`).

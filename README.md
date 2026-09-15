@@ -237,7 +237,9 @@ for await (const user of client.createIterable({ model, schema: User, messages }
 }
 ```
 
-OpenAI-shaped chunks (`delta.content` / tool `arguments`) and Anthropic `input_json_delta.partial_json`.
+Streaming works across all providers: OpenAI-shaped chunks (`delta.content` / tool
+`arguments`), Anthropic `input_json_delta.partial_json`, and Gemini
+`candidates[].content.parts` / `text` chunks.
 
 ### Images
 

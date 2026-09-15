@@ -37,6 +37,7 @@ const user = await client.create({
 | **Lists** | `z.array(...)`; root arrays are sent as `{ items: T[] }` |
 | **Zod extras** | `z.union` / `z.discriminatedUnion`, `z.record`, `z.date()` (ISO strings) |
 | **Maybe** | `maybe(User)` → `{ result, error, message }` instead of throwing on a miss |
+| **Citations** | `cited(User)` + `context` verifies model quotes against the source; fakes reask |
 | **Hooks** | `onRequest` / `onParseError` / `onSuccess` / `onUsage` (token totals across reasks) |
 | **Stream** | `createPartial()` incomplete objects; `createIterable()` complete list items |
 | **Images** | `imageUrl(url)` in `messages[].content` (Anthropic maps these to `image` / `source`) |
@@ -194,6 +195,34 @@ const user = await client.create({
 | `GEMINI_JSON` | `config.responseJsonSchema` | `text` or `candidates[].content.parts` |
 
 `JSON_SCHEMA` always sends OpenAI `strict: true`. That subset is **not** Zod `.optional()`: every property must be listed in `required`, and open maps are rejected. Rubric fails **locally** in `prepareRequest` if the schema is not strict-safe (`.optional()` keys, `z.record`, non-nullable unions). Use `.nullable()` (key present, value may be `null`), or switch to `TOOLS` / `MD_JSON`. See [#23](https://github.com/tomnio/rubric/issues/23).
+
+### Citations
+
+`cited()` adds a `substring_quotes` field and checks each quote against the
+source text you pass as `context`. A quote that is not in the source is a
+validation failure, so it reasks — the model cannot cite something it made up.
+Quotes that match are rewritten to the exact source substring.
+
+```ts
+import { cited } from "@tomnio/rubric"
+
+const Fact = cited(
+  z.object({
+    statement: z.string().describe("A factual statement from the source"),
+  }),
+)
+
+const fact = await client.create({
+  model: "gpt-5.6-luna",
+  schema: Fact,
+  messages: [{ role: "user", content: `Extract a fact from: ${source}` }],
+  context: source,
+})
+// { statement: "...", substring_quotes: ["... exact source substring ..."] }
+```
+
+Matching is exact, or after lowercasing and collapsing whitespace runs. Without
+a `context`, the field passes through unchecked. Not supported on streaming.
 
 ### Maybe, refine, hooks
 

@@ -1,4 +1,5 @@
 import type { z } from "zod"
+import { withCitationContext } from "./citation.js"
 import {
   JsonParseError,
   RetryExhaustedError,
@@ -47,7 +48,11 @@ export async function extract<T extends z.ZodType>(
     try {
       const json = coerceParsedValue(params.schema, handler.parseResponse(raw))
       // Includes .refine() / .superRefine(); those issues go into reask text.
-      const parsed = params.schema.safeParse(json)
+      // withCitationContext exposes `context` to cited() validators, standing in
+      // for Pydantic's validation_context (Zod's safeParse has no such channel).
+      const parsed = withCitationContext(params.context, () =>
+        params.schema.safeParse(json),
+      )
       if (!parsed.success) {
         throw new SchemaValidationError(
           "Output failed schema validation",

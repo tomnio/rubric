@@ -117,6 +117,11 @@ export type CreateParams<T extends z.ZodType> = SamplingExtras & {
   mode?: Mode
   hooks?: Hooks
   signal?: AbortSignal
+  /**
+   * Source text for `cited()` schemas. Quotes must appear in this text.
+   * Ignored by schemas that do not use `cited()`.
+   */
+  context?: string
 }
 
 export type DeepPartial<T> = T extends (infer U)[]

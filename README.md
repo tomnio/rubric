@@ -43,6 +43,7 @@ const user = await client.create({
 | **Token budget** | `tokenBudget` caps cumulative tokens; the loop stops instead of reasking |
 | **Stream** | `createPartial()` incomplete objects (closed subtrees validated); `createIterable()` complete list items |
 | **Images** | `imageUrl(url)` in `messages[].content` (Anthropic maps these to `image` / `source`) |
+| **Documents** | `createDocument()` splits a long text, extracts per chunk, and merges — `@tomnio/rubric/document` |
 
 Not included: a `from_provider("vendor/model")` router, CLI, batch jobs, or cache.
 
@@ -360,6 +361,70 @@ await client.create({
 ```
 
 `ANTHROPIC_TOOLS` maps `imageUrl()` to Anthropic `{ type: "image", source }`. You can also pass `anthropicImageUrl` / `anthropicImageBase64` directly.
+
+### Documents
+
+`create()` takes one prompt. `createDocument()` takes a whole **document**: it splits the text, runs the same extraction on each chunk, and merges the results into one object. It lives behind a separate entry point so that importing the core does not pull in a WASM chunker.
+
+```bash
+pnpm add @chonkiejs/core   # optional, only needed for createDocument()
+```
+
+```ts
+import { createDocument } from "@tomnio/rubric/document"
+import { z } from "zod"
+
+const Invoice = z.object({
+  title: z.string(),
+  items: z.array(z.object({ description: z.string(), amount: z.number() })),
+})
+
+// A chunk usually holds only part of the document, so validate chunks with a
+// tolerant schema and keep `schema` strict for the merged result.
+const ChunkInvoice = z.object({
+  title: z.string().nullable().default(null),
+  items: z.array(z.object({ description: z.string(), amount: z.number() })).default([]),
+})
+
+const { data, chunks, usage } = await createDocument(client, {
+  model: "gpt-5.6-luna",
+  document: longText,
+  instruction: "Extract the invoice header and every line item.",
+  schema: Invoice,
+  chunkSchema: ChunkInvoice,
+  chunkSize: 2000,   // characters, not tokens
+  overlap: 100,      // characters bled outward on each side
+})
+
+data.title     // merged, validated against Invoice
+chunks[0]      // { index, startIndex, endIndex, value, usage }
+```
+
+`startIndex` / `endIndex` are absolute offsets into the document you passed in, so you can trace any value back to where it came from.
+
+**Chunking.** The default chunker is `RecursiveChunker` from `@chonkiejs/core`, which splits on paragraph, then sentence, then punctuation. Its default tokenizer is character-based, so `chunkSize` counts **characters**. `overlap` widens each chunk's window over the original text, so content cut at a boundary still appears whole in one of the overlapping windows. Pass your own `chunker` to split differently.
+
+**Merging is deterministic and does not call the model:**
+
+- **Array fields** are concatenated across chunks and deduplicated by deep structural equality.
+- **Every other field** takes the first non-null value seen, in chunk order.
+
+What this means in practice:
+
+- Overlapping windows re-report the same item; deep equality removes the duplicate.
+- A value **reworded** in two chunks (same meaning, different text) is *not* merged — you get both.
+- A conflicting scalar keeps the **first** value and silently discards the later one.
+- A record longer than `overlap` that straddles a boundary can still be lost.
+
+There is deliberately no LLM "reduce" pass. A second, unvalidated model call would be nondeterministic and would reopen the failure modes `create()` exists to close.
+
+**Failures.** A chunk that exhausts its retries is recorded on `chunks[i].error` and skipped by default; the rest of the document still merges. Pass `onChunkError: "abort"` to throw on the first failure instead. An aborted `signal` always propagates.
+
+**Merged output that fails `schema`** (a required field in no chunk, or two chunks contributing incompatible values) throws `DocumentMergeError`, which carries `issues`, the invalid `partial` object, and any `chunkErrors`.
+
+**Cost.** Each chunk is a separate `create()` call, so a document of N chunks costs N calls — up to `N × (maxRetries + 1)`. `tokenBudget` applies **per chunk**, not per document.
+
+Requires Node 20+. The chunker is a WASM module, so it does not run on older Node.
 
 ## License
 

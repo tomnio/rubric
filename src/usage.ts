@@ -9,6 +9,18 @@ export function emptyUsage(): TokenUsage {
   return { inputTokens: 0, outputTokens: 0, totalTokens: 0, attempts: 0 }
 }
 
+/** Add two already-computed totals, e.g. across the chunks of a document. */
+export function sumUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
+  const inputTokens = a.inputTokens + b.inputTokens
+  const outputTokens = a.outputTokens + b.outputTokens
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    attempts: a.attempts + b.attempts,
+  }
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (value !== null && typeof value === "object" && !Array.isArray(value)) {
     return value as Record<string, unknown>

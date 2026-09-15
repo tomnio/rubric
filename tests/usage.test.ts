@@ -6,6 +6,7 @@ import {
   type LLMClient,
   type TokenUsage,
 } from "../src/index.js"
+import { emptyUsage, sumUsage } from "../src/usage.js"
 
 const User = z.object({
   name: z.string(),
@@ -249,5 +250,23 @@ describe("token usage", () => {
       },
       { attemptNumber: 1, maxAttempts: 1, isLastAttempt: true },
     )
+  })
+})
+
+describe("sumUsage", () => {
+  it("adds two totals field by field", () => {
+    const a = { inputTokens: 10, outputTokens: 4, totalTokens: 14, attempts: 1 }
+    const b = { inputTokens: 5, outputTokens: 3, totalTokens: 8, attempts: 2 }
+    expect(sumUsage(a, b)).toEqual({
+      inputTokens: 15,
+      outputTokens: 7,
+      totalTokens: 22,
+      attempts: 3,
+    })
+  })
+
+  it("is identity when one side is empty", () => {
+    const a = { inputTokens: 3, outputTokens: 1, totalTokens: 4, attempts: 1 }
+    expect(sumUsage(a, emptyUsage())).toEqual(a)
   })
 })

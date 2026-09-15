@@ -404,10 +404,13 @@ chunks[0]      // { index, startIndex, endIndex, value, usage }
 
 **Chunking.** The default chunker is `RecursiveChunker` from `@chonkiejs/core`, which splits on paragraph, then sentence, then punctuation. Its default tokenizer is character-based, so `chunkSize` counts **characters**. `overlap` widens each chunk's window over the original text, so content cut at a boundary still appears whole in one of the overlapping windows. Pass your own `chunker` to split differently.
 
-**Merging is deterministic and does not call the model:**
+**Merging is deterministic and does not call the model.** The strategy follows the schema's root shape:
 
-- **Array fields** are concatenated across chunks and deduplicated by deep structural equality.
-- **Every other field** takes the first non-null value seen, in chunk order.
+| Root | Rule |
+|---|---|
+| object | Array **fields** are concatenated across chunks and deduplicated by deep structural equality; every other field takes the first non-null value seen, in chunk order. |
+| array | The per-chunk arrays are concatenated and deduplicated the same way. |
+| scalar (`z.string()`, `z.date()`, ...) | The first non-null value wins. |
 
 What this means in practice:
 

@@ -320,3 +320,48 @@ describe("createDocument", () => {
     expect(result.data).toEqual({ title: "Invoice", items: [{ id: 1 }] })
   })
 })
+
+describe("createDocument with a non-object root schema", () => {
+  it("concatenates a root array across chunks", async () => {
+    const client = chunkAwareClient([[{ id: 1 }, { id: 2 }], [{ id: 3 }]])
+    const result = await createDocument(
+      client,
+      {
+        document: DOC,
+        model: "test-model",
+        instruction: "Extract every item.",
+        schema: z.array(z.object({ id: z.number() })),
+        chunkSize: 10,
+        overlap: 0,
+        chunker: fixedChunker(10),
+      },
+      { mode: "TOOLS" },
+    )
+    expect(result.data).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }])
+  })
+
+  it("merges a scalar root from a Date-typed schema", async () => {
+    // Regression: a Date root used to be dropped by the object-shaped merge,
+    // failing with a message that blamed the schema.
+    // The payload is a JSON string, so it is quoted for the tool arguments.
+    const client = chunkAwareClient([
+      '"2020-01-01T00:00:00Z"',
+      '"2021-06-15T00:00:00Z"',
+    ])
+    const result = await createDocument(
+      client,
+      {
+        document: DOC,
+        model: "test-model",
+        instruction: "Extract the date.",
+        schema: z.date(),
+        chunkSize: 10,
+        overlap: 0,
+        chunker: fixedChunker(10),
+      },
+      { mode: "TOOLS" },
+    )
+    expect(result.data).toBeInstanceOf(Date)
+    expect(result.data.toISOString()).toBe("2020-01-01T00:00:00.000Z")
+  })
+})

@@ -259,8 +259,30 @@ function coerceBySchema(schema: ZodTypeAny, json: unknown): unknown {
   return json
 }
 
+/** Root shape of a schema. The document merge picks its strategy from this. */
+export type RootKind = "array" | "object" | "other"
+
+/**
+ * Classify a schema's root shape.
+ *
+ * Merging per-chunk results differs by root: arrays concatenate, objects merge
+ * field by field, and anything else takes the first value. Reading the schema
+ * is more reliable than inspecting runtime values, which cannot tell a
+ * `z.date()` root apart from an object root.
+ */
+export function rootKind(schema: ZodTypeAny): RootKind {
+  const typeName = def(unwrap(schema).inner).typeName
+  if (typeName === "ZodArray") {
+    return "array"
+  }
+  if (typeName === "ZodObject" || typeName === "ZodRecord") {
+    return "object"
+  }
+  return "other"
+}
+
 function isRootArray(schema: ZodTypeAny): boolean {
-  return def(unwrap(schema).inner).typeName === "ZodArray"
+  return rootKind(schema) === "array"
 }
 
 /** All object fields optional, recursively. Used to hydrate streaming snapshots. */

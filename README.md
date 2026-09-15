@@ -439,7 +439,9 @@ There is deliberately no LLM "reduce" pass. A second, unvalidated model call wou
 
 **Failures.** A chunk that exhausts its retries is recorded on `chunks[i].error` and skipped by default; the rest of the document still merges. Pass `onChunkError: "abort"` to throw on the first failure instead. An aborted `signal` always propagates.
 
-**Merged output that fails `schema`** (a required field in no chunk, or two chunks contributing incompatible values) throws `DocumentMergeError`, which carries `issues`, the invalid `partial` object, and any `chunkErrors`.
+**Nothing succeeded** — every chunk failed, or the document was blank so no chunk ran — throws `DocumentNoDataError`, which carries `reason` (`"all-chunks-failed"` or `"empty-document"`), the `chunkErrors`, and the `usage` already spent. A blank document with an all-optional schema is not a valid empty answer; it is a question that was never asked. Only one chunk needs to succeed for the normal return.
+
+**Merged output that fails `schema`** (a required field in no chunk, or two chunks contributing incompatible values) throws `DocumentMergeError`, which carries `issues`, the invalid `partial` object, and any `chunkErrors`. This is a different failure from `DocumentNoDataError`: the chunks *did* produce values, so the problem is their combination.
 
 **Cost.** Each chunk is a separate `create()` call, so a document of N chunks costs N calls — up to `N × (maxRetries + 1)`. `tokenBudget` applies **per chunk**, not per document.
 

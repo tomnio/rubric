@@ -5,12 +5,16 @@ import { extract } from "../extract.js"
 import type { CreateParams, Hooks, Message, WrapOptions } from "../types.js"
 import { emptyUsage, sumUsage, type TokenUsage } from "../usage.js"
 import { chunkDocument, type Chunker } from "./chunker.js"
-import { DocumentChunkError } from "./errors.js"
+import { DocumentChunkError, DocumentNoDataError } from "./errors.js"
 import { mergeInto, type ChunkValue, type DedupeMode } from "./merge.js"
 
 export { chunkDocument, defaultChunker } from "./chunker.js"
 export type { Chunker, ChunkerOptions, DocumentChunk } from "./chunker.js"
-export { DocumentChunkError, DocumentMergeError } from "./errors.js"
+export {
+  DocumentChunkError,
+  DocumentMergeError,
+  DocumentNoDataError,
+} from "./errors.js"
 export { mergeChunks, mergeInto } from "./merge.js"
 export type { ChunkValue, DedupeMode, MergeOptions } from "./merge.js"
 
@@ -74,6 +78,9 @@ export type DocumentParams<T extends z.ZodType> = Omit<
    *
    * "skip" records the failure on `chunks[i].error` and keeps going; "abort"
    * throws immediately. An aborted `signal` always propagates either way.
+   *
+   * "skip" is not a licence to return nothing: when every chunk fails the call
+   * throws `DocumentNoDataError` rather than a successful-looking empty object.
    */
   onChunkError?: "skip" | "abort"
   /**
@@ -232,6 +239,19 @@ export async function createDocument<T extends z.ZodType>(
       value,
       usage: chunkUsage,
     })
+  }
+
+  // Nothing to merge. Checked before mergeInto, so the failure names itself
+  // instead of surfacing as a schema error — the schema is fine; the chunks
+  // are the problem. A blank document reaches here with no chunks at all.
+  if (values.length === 0) {
+    const reason = chunks.length === 0 ? "empty-document" : "all-chunks-failed"
+    throw new DocumentNoDataError(
+      reason === "empty-document"
+        ? "The document was empty, so no chunks were extracted"
+        : `All ${chunks.length} chunk(s) failed, so there is nothing to merge`,
+      { reason, chunkErrors, usage },
+    )
   }
 
   return {

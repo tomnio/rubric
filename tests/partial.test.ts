@@ -140,4 +140,84 @@ describe("createPartial", () => {
     })
     await expect(collect(iterable)).rejects.toBeInstanceOf(JsonParseError)
   })
+
+  it("drops a closed nested object that is missing a required field", async () => {
+    const Nested = z.object({
+      user: z.object({ name: z.string(), age: z.number().int() }),
+      tags: z.array(z.string()),
+    })
+    // `user` has closed (a later sibling follows) but has no `age`. It is
+    // therefore definitively incomplete, not merely still arriving. The old
+    // deepPartialZod path made every field optional and would have shown
+    // { user: { name: "Alice" } } as if it were valid.
+    const client = wrap(
+      streamClient([
+        contentDelta('{"user": {"name": "Alice"}, "tags": ['),
+        contentDelta('"a"]}'),
+      ]),
+      { mode: "JSON_SCHEMA" },
+    )
+
+    const snapshots = await collect(
+      client.createPartial({
+        model: "test-model",
+        schema: Nested,
+        messages: [{ role: "user", content: "x" }],
+      }),
+    )
+
+    // The closed-but-incomplete object never appears.
+    expect(snapshots.some((snap) => snap.user !== undefined)).toBe(false)
+    // Once the root closes it is invalid too (user still has no age), so the
+    // final frame is dropped and the last snapshot is the open-array one.
+    expect(snapshots.at(-1)).toEqual({ tags: [] })
+  })
+
+  it("validates a nested object once a later sibling closes it", async () => {
+    const Nested = z.object({
+      user: z.object({ name: z.string(), age: z.number().int() }),
+      tags: z.array(z.string()),
+    })
+    const client = wrap(
+      streamClient([
+        contentDelta('{"user": {"name": "Alice", "age": 30}, "tags": ['),
+        contentDelta('"a"]}'),
+      ]),
+      { mode: "JSON_SCHEMA" },
+    )
+
+    const snapshots = await collect(
+      client.createPartial({
+        model: "test-model",
+        schema: Nested,
+        messages: [{ role: "user", content: "x" }],
+      }),
+    )
+
+    expect(snapshots.at(-1)).toEqual({
+      user: { name: "Alice", age: 30 },
+      tags: ["a"],
+    })
+  })
+
+  it("still yields a truncated string field without validating it", async () => {
+    const client = wrap(
+      streamClient([
+        contentDelta('{"name": "Jo'),
+        contentDelta('hn", "age": 25}'),
+      ]),
+      { mode: "JSON_SCHEMA" },
+    )
+
+    const snapshots = await collect(
+      client.createPartial({
+        model: "test-model",
+        schema: User,
+        messages: [{ role: "user", content: "John is 25 years old" }],
+      }),
+    )
+
+    expect(snapshots[0]).toMatchObject({ name: "Jo" })
+    expect(snapshots.at(-1)).toEqual({ name: "John", age: 25 })
+  })
 })

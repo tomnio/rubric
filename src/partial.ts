@@ -1,9 +1,11 @@
 import type { z } from "zod"
+import { JsonCompleteness } from "./completeness.js"
 import { JsonParseError } from "./errors.js"
 import { handlerFor } from "./modes/registry.js"
 import { applyRequestExtras, mergeSamplingExtras } from "./request.js"
-import { coerceParsedValue, deepPartialZod } from "./schema.js"
-import { parseIncomplete } from "./stream-json.js"
+import { coerceParsedValue } from "./schema.js"
+import { buildSnapshot } from "./snapshot.js"
+import { jsonSlice, parseIncomplete } from "./stream-json.js"
 import type {
   CreateParams,
   DeepPartial,
@@ -18,6 +20,10 @@ const DEFAULT_MODE: Mode = "TOOLS"
 
 /**
  * Stream incomplete snapshots. Does not reask.
+ *
+ * Closed subtrees are validated against the real schema, so a wrong value in a
+ * field that has fully arrived is caught mid-stream. Subtrees still arriving
+ * are kept structurally, without pretending their truncated values are final.
  */
 export async function* extractPartial<T extends z.ZodType>(
   client: LLMClient,
@@ -38,7 +44,7 @@ export async function* extractPartial<T extends z.ZodType>(
     }),
     mergeSamplingExtras(defaults, params),
   )
-  const partialSchema = deepPartialZod(params.schema)
+  const tracker = new JsonCompleteness()
   let buffer = ""
   let lastSerialized = ""
   let usage = emptyUsage()
@@ -50,20 +56,27 @@ export async function* extractPartial<T extends z.ZodType>(
   )) {
     usage = mergeChunkUsage(usage, chunk)
     buffer += handler.deltaFromChunk(chunk)
+
+    // The tracker reads the same slice the parser does, so paths line up.
+    const slice = jsonSlice(buffer).trim()
+    tracker.analyze(slice)
+
     const json = coerceParsedValue(params.schema, parseIncomplete(buffer))
     if (json === undefined) {
       continue
     }
-    const parsed = partialSchema.safeParse(json)
-    if (!parsed.success) {
+
+    const built = buildSnapshot(json, params.schema, tracker)
+    if (!built.ok) {
       continue
     }
-    const serialized = JSON.stringify(parsed.data)
+
+    const serialized = JSON.stringify(built.value)
     if (serialized === lastSerialized) {
       continue
     }
     lastSerialized = serialized
-    yield parsed.data as DeepPartial<z.infer<T>>
+    yield built.value as DeepPartial<z.infer<T>>
   }
 
   hooks.onUsage?.(finishStreamUsage(usage))

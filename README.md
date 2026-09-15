@@ -296,11 +296,20 @@ Every hook gets an `AttemptMeta` as its second argument:
 
 ```ts
 type AttemptMeta = {
-  attemptNumber: number   // 1-based
+  attemptNumber: number   // 1-based, within this chunk for createDocument()
   maxAttempts: number     // maxRetries + 1
   isLastAttempt: boolean  // no further attempt will run
+  chunk?: {               // present only during createDocument()
+    index: number         // 0-based, document order
+    startIndex: number    // absolute offsets into the document
+    endIndex: number
+    total: number         // how many chunks the document was split into
+  }
 }
 ```
+
+`chunk` is filled only by `createDocument()`, where one call becomes many; a
+plain `create()` leaves the key absent. See [Documents](#documents).
 
 `isLastAttempt` is true when the loop is actually over, which includes a
 guardrail stopping it early — not merely `attemptNumber === maxAttempts`. That
@@ -401,6 +410,23 @@ chunks[0]      // { index, startIndex, endIndex, value, usage }
 ```
 
 `startIndex` / `endIndex` are absolute offsets into the document you passed in, so you can trace any value back to where it came from.
+
+**Per-chunk hooks.** Hooks fire during the call, so they cannot wait for `result.chunks[]`. Every hook's `AttemptMeta` therefore carries a `chunk` descriptor for the chunk that fired it:
+
+```ts
+await createDocument(client, {
+  ...,
+  hooks: {
+    onSuccess(_value, meta) {
+      if (meta.chunk) {
+        console.log(`extracted chunk ${meta.chunk.index + 1}/${meta.chunk.total}`)
+      }
+    },
+  },
+})
+```
+
+Use `meta.chunk.index`, **not** a counter you increment per hook call. `attemptNumber` counts attempts within a chunk and resets at each chunk boundary, so a chunk that reasks emits several events — a counter would report "chunk 6" for a two-chunk document. `total` is included so progress needs no up-front chunk count.
 
 **Chunking.** The default chunker is `RecursiveChunker` from `@chonkiejs/core`, which splits on paragraph, then sentence, then punctuation. Its default tokenizer is character-based, so `chunkSize` counts **characters**. `overlap` widens each chunk's window over the original text, so content cut at a boundary still appears whole in one of the overlapping windows. Pass your own `chunker` to split differently.
 

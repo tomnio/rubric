@@ -87,6 +87,22 @@ export type Message = {
   tool_calls?: ToolCall[]
 }
 
+/**
+ * Where a hook event came from when one call fanned out into many.
+ *
+ * Populated only by `createDocument()`, which runs `create()` once per chunk.
+ * `create()` leaves it undefined, because a single call is its own context.
+ */
+export type ChunkMeta = {
+  /** 0-based position in document order. */
+  index: number
+  /** Absolute offset of this chunk's window in the document. */
+  startIndex: number
+  endIndex: number
+  /** How many chunks the document was split into, so progress is computable. */
+  total: number
+}
+
 /** Per-attempt context passed to every hook as its second argument. */
 export type AttemptMeta = {
   /** 1-based index of the attempt that just ran. */
@@ -98,6 +114,16 @@ export type AttemptMeta = {
    * or a guardrail (token budget) stopped the loop early.
    */
   isLastAttempt: boolean
+  /**
+   * Which chunk this attempt belongs to. Present only during
+   * `createDocument()`, where one document becomes many `create()` calls;
+   * absent for a plain `create()`.
+   *
+   * `attemptNumber` counts attempts *within this chunk* and resets at each
+   * chunk boundary, so `chunk.index` — not a running count of hook calls — is
+   * what identifies the chunk.
+   */
+  chunk?: ChunkMeta
 }
 
 /**

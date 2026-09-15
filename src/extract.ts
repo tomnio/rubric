@@ -10,7 +10,15 @@ import { attemptMeta, safeEmit } from "./hooks.js"
 import { handlerFor } from "./modes/registry.js"
 import { applyRequestExtras, mergeSamplingExtras } from "./request.js"
 import { coerceParsedValue } from "./schema.js"
-import type { CreateParams, Hooks, LLMClient, Mode, WrapOptions } from "./types.js"
+import type {
+  AttemptMeta,
+  ChunkMeta,
+  CreateParams,
+  Hooks,
+  LLMClient,
+  Mode,
+  WrapOptions,
+} from "./types.js"
 import { addUsage, emptyUsage, hasUsage } from "./usage.js"
 
 const DEFAULT_MAX_RETRIES = 3
@@ -20,6 +28,12 @@ export async function extract<T extends z.ZodType>(
   client: LLMClient,
   params: CreateParams<T>,
   defaults?: WrapOptions,
+  /**
+   * Set only by `createDocument()`, which calls this once per chunk. Threaded
+   * into every hook's `AttemptMeta` so a handler can tell which chunk it is
+   * looking at; `create()` leaves it undefined.
+   */
+  chunk?: ChunkMeta,
 ): Promise<z.infer<T>> {
   const mode = params.mode ?? defaults?.mode ?? DEFAULT_MODE
   const maxRetries =
@@ -45,13 +59,18 @@ export async function extract<T extends z.ZodType>(
   // unenforceable the moment one response omits it.
   let usageAvailable = true
 
+  // Every hook below belongs to the same chunk (when there is one), so bind it
+  // once instead of threading it through eight call sites.
+  const meta = (attempt: number, max: number, last: boolean): AttemptMeta =>
+    attemptMeta(attempt, max, last, chunk)
+
   while (attempts < attemptsAllowed) {
     attempts += 1
     const retriesLeft = attempts < attemptsAllowed
     safeEmit(
       "onRequest",
       hooks.onRequest,
-      [kwargs, attemptMeta(attempts, attemptsAllowed, !retriesLeft)],
+      [kwargs, meta(attempts, attemptsAllowed,!retriesLeft)],
     )
     params.signal?.throwIfAborted()
 
@@ -66,7 +85,7 @@ export async function extract<T extends z.ZodType>(
       safeEmit(
         "onError",
         hooks.onError,
-        [err, attemptMeta(attempts, attemptsAllowed, true)],
+        [err, meta(attempts, attemptsAllowed,true)],
       )
       throw err
     }
@@ -94,12 +113,12 @@ export async function extract<T extends z.ZodType>(
       safeEmit(
         "onUsage",
         hooks.onUsage,
-        [usage, attemptMeta(attempts, attemptsAllowed, true)],
+        [usage, meta(attempts, attemptsAllowed,true)],
       )
       safeEmit(
         "onSuccess",
         hooks.onSuccess,
-        [parsed.data, attemptMeta(attempts, attemptsAllowed, true)],
+        [parsed.data, meta(attempts, attemptsAllowed,true)],
       )
       return parsed.data
     } catch (err) {
@@ -119,13 +138,13 @@ export async function extract<T extends z.ZodType>(
       safeEmit(
         "onParseError",
         hooks.onParseError,
-        [err, attemptMeta(attempts, attemptsAllowed, isLast)],
+        [err, meta(attempts, attemptsAllowed,isLast)],
       )
       if (overBudget !== undefined) {
         safeEmit(
           "onUsage",
           hooks.onUsage,
-          [usage, attemptMeta(attempts, attemptsAllowed, true)],
+          [usage, meta(attempts, attemptsAllowed,true)],
         )
         throw overBudget
       }
@@ -139,7 +158,7 @@ export async function extract<T extends z.ZodType>(
   safeEmit(
     "onUsage",
     hooks.onUsage,
-    [usage, attemptMeta(attempts, attemptsAllowed, true)],
+    [usage, meta(attempts, attemptsAllowed,true)],
   )
   throw new RetryExhaustedError(
     `Failed after ${attempts} attempt(s)`,

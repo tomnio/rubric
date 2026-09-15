@@ -17,6 +17,8 @@ export {
 } from "./errors.js"
 export { mergeChunks, mergeInto } from "./merge.js"
 export type { ChunkValue, DedupeMode, MergeOptions } from "./merge.js"
+// The chunk descriptor createDocument() puts on every hook's AttemptMeta.
+export type { AttemptMeta, ChunkMeta } from "../types.js"
 
 const DEFAULT_CHUNK_SIZE = 2000
 const DEFAULT_OVERLAP = 100
@@ -195,6 +197,14 @@ export async function createDocument<T extends z.ZodType>(
         llm,
         chunkParams(params, chunkSchema, chunk.text, hooks),
         defaults,
+        // Lets every hook attribute its event to this chunk, which a plain
+        // create() call has no need for.
+        {
+          index,
+          startIndex: chunk.startIndex,
+          endIndex: chunk.endIndex,
+          total: chunks.length,
+        },
       )
     } catch (error) {
       if (isAbort(error) || params.signal?.aborted) {

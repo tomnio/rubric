@@ -340,6 +340,35 @@ describe("createDocument with a non-object root schema", () => {
     expect(result.data).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }])
   })
 
+  it("keeps a distinct Date reported by each chunk", async () => {
+    // Regression: the dedupe key canonicalized every Date to "{}", so three
+    // chunks reporting three different dates collapsed to one.
+    const client = chunkAwareClient([
+      { events: [{ when: "2020-01-01T00:00:00Z" }] },
+      { events: [{ when: "2021-06-15T00:00:00Z" }] },
+      { events: [{ when: "2023-12-31T00:00:00Z" }] },
+    ])
+    const result = await createDocument(
+      client,
+      {
+        document: "AAAA BBBB CCCC",
+        model: "test-model",
+        instruction: "Extract the events.",
+        schema: z.object({ events: z.array(z.object({ when: z.date() })) }),
+        chunkSize: 5,
+        overlap: 0,
+        chunker: fixedChunker(5),
+      },
+      { mode: "TOOLS" },
+    )
+    expect(result.data.events.length).toBe(3)
+    expect(result.data.events.map((event) => event.when.toISOString())).toEqual([
+      "2020-01-01T00:00:00.000Z",
+      "2021-06-15T00:00:00.000Z",
+      "2023-12-31T00:00:00.000Z",
+    ])
+  })
+
   it("merges a scalar root from a Date-typed schema", async () => {
     // Regression: a Date root used to be dropped by the object-shaped merge,
     // failing with a message that blamed the schema.

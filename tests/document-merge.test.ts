@@ -81,6 +81,175 @@ describe("mergeChunks", () => {
   })
 })
 
+describe("mergeChunks dedupe key", () => {
+  it("keeps distinct Date values apart", () => {
+    const merged = mergeChunks([
+      {
+        events: [
+          new Date("2020-01-01T00:00:00Z"),
+          new Date("2021-06-15T00:00:00Z"),
+          new Date("2023-12-31T00:00:00Z"),
+        ],
+      },
+    ])
+    expect((merged.events as Date[]).length).toBe(3)
+  })
+
+  it("still collapses two Dates that hold the same instant", () => {
+    const merged = mergeChunks([
+      { events: [new Date("2020-01-01T00:00:00Z"), new Date("2020-01-01T00:00:00Z")] },
+    ])
+    expect((merged.events as Date[]).length).toBe(1)
+  })
+
+  it("distinguishes an invalid Date from a valid one and from another invalid one", () => {
+    const merged = mergeChunks([{ events: [new Date("nope"), new Date("nope"), new Date()] }])
+    expect((merged.events as Date[]).length).toBe(2)
+  })
+
+  it("keeps distinct Map values apart", () => {
+    const merged = mergeChunks([{ a: [new Map([["k", 1]]), new Map([["k", 2]])] }])
+    expect((merged.a as Map<string, number>[]).length).toBe(2)
+  })
+
+  it("collapses two Maps with the same entries regardless of insertion order", () => {
+    const merged = mergeChunks([
+      {
+        a: [
+          new Map<string, number>([["x", 1], ["y", 2]]),
+          new Map<string, number>([["y", 2], ["x", 1]]),
+        ],
+      },
+    ])
+    expect((merged.a as Map<string, number>[]).length).toBe(1)
+  })
+
+  it("keeps distinct Set values apart", () => {
+    const merged = mergeChunks([{ a: [new Set([1]), new Set([2])] }])
+    expect((merged.a as Set<number>[]).length).toBe(2)
+  })
+
+  it("collapses two Sets with the same members regardless of insertion order", () => {
+    const merged = mergeChunks([{ a: [new Set([1, 2]), new Set([2, 1])] }])
+    expect((merged.a as Set<number>[]).length).toBe(1)
+  })
+
+  it("keeps distinct RegExp values apart", () => {
+    const merged = mergeChunks([{ a: [/a/, /b/] }])
+    expect((merged.a as RegExp[]).length).toBe(2)
+  })
+
+  it("distinguishes two RegExps that differ only in flags", () => {
+    const merged = mergeChunks([{ a: [/a/g, /a/i] }])
+    expect((merged.a as RegExp[]).length).toBe(2)
+  })
+
+  it("does not collide NaN with null", () => {
+    const merged = mergeChunks([{ a: [NaN, null] }])
+    expect((merged.a as unknown[]).length).toBe(2)
+  })
+
+  it("collapses two NaNs", () => {
+    const merged = mergeChunks([{ a: [NaN, NaN] }])
+    expect((merged.a as unknown[]).length).toBe(1)
+  })
+
+  it("distinguishes NaN, Infinity, -Infinity and null from one another", () => {
+    const merged = mergeChunks([{ a: [NaN, Infinity, -Infinity, null] }])
+    expect((merged.a as unknown[]).length).toBe(4)
+  })
+
+  it("distinguishes -0 from 0", () => {
+    const merged = mergeChunks([{ a: [-0, 0] }])
+    expect((merged.a as unknown[]).length).toBe(2)
+  })
+
+  it("keeps distinct nested Dates apart", () => {
+    // The issue's nested case: canonicalize recursed, so every row's `d`
+    // became "{}" and the second row was dropped.
+    const merged = mergeChunks([
+      {
+        rows: [
+          { d: new Date("2020-01-01T00:00:00Z"), n: "a" },
+          { d: new Date("2021-01-01T00:00:00Z"), n: "a" },
+        ],
+      },
+    ])
+    expect((merged.rows as unknown[]).length).toBe(2)
+  })
+
+  it("treats a class instance as opaque: distinct instances stay distinct", () => {
+    class Money {
+      constructor(readonly amount: number) {}
+    }
+    const merged = mergeChunks([{ a: [new Money(1), new Money(2)] }])
+    expect((merged.a as Money[]).length).toBe(2)
+  })
+
+  it("treats the same class instance as equal to itself", () => {
+    class Money {
+      constructor(readonly amount: number) {}
+    }
+    const one = new Money(1)
+    const merged = mergeChunks([{ a: [one, one] }])
+    expect((merged.a as Money[]).length).toBe(1)
+  })
+
+  it("does not let a string payload imitate the key encoding", () => {
+    // Length-prefixing keeps the encoding injective: a string that looks like a
+    // key for another value must not collide with that value's own key.
+    const merged = mergeChunks([{ a: ["array:[]", []] }])
+    expect((merged.a as unknown[]).length).toBe(2)
+  })
+
+  it("does not confuse a nested array with a nested object", () => {
+    const merged = mergeChunks([{ a: [[1], { 0: 1 }] }])
+    expect((merged.a as unknown[]).length).toBe(2)
+  })
+
+  it("distinguishes an object key from a string value", () => {
+    const merged = mergeChunks([{ a: [{ k: "v" }, { k: "v" }] }])
+    expect((merged.a as unknown[]).length).toBe(1)
+  })
+
+  it("collapses Maps whose opaque members were inserted in a different order", () => {
+    // The identity table is shared across the whole dedupe() call, so a member
+    // reaches the same id no matter which entry it is reached through. That
+    // makes the sort key order-independent even for opaque members.
+    class Tag {
+      constructor(readonly name: string) {}
+    }
+    const x = new Tag("x")
+    const y = new Tag("y")
+    const merged = mergeChunks([
+      { a: [new Map([["p", x], ["q", y]]), new Map([["q", y], ["p", x]])] },
+    ])
+    expect((merged.a as unknown[]).length).toBe(1)
+  })
+
+  it("keeps Maps apart when their opaque members are different instances", () => {
+    // Two equal-looking but distinct instances are not the same value.
+    class Tag {
+      constructor(readonly name: string) {}
+    }
+    const merged = mergeChunks([
+      { a: [new Map([["p", new Tag("x")]]), new Map([["p", new Tag("x")]])] },
+    ])
+    expect((merged.a as unknown[]).length).toBe(2)
+  })
+
+  it("keeps two distinct symbols with the same description apart", () => {
+    const merged = mergeChunks([{ a: [Symbol("x"), Symbol("x")] }])
+    expect((merged.a as symbol[]).length).toBe(2)
+  })
+
+  it("collapses the same symbol seen twice", () => {
+    const shared = Symbol("x")
+    const merged = mergeChunks([{ a: [shared, shared] }])
+    expect((merged.a as symbol[]).length).toBe(1)
+  })
+})
+
 describe("mergeInto", () => {
   const Invoice = z.object({
     title: z.string(),

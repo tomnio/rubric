@@ -419,6 +419,8 @@ What this means in practice:
 - A conflicting scalar keeps the **first** value and silently discards the later one.
 - A record longer than `overlap` that straddles a boundary can still be lost.
 
+**Deep equality** compares type and content, so `z.date()`, `Map`, `Set` and `RegExp` values are compared as values: two `Date`s are equal only if they hold the same instant, and `NaN` is distinct from `null`. A value with no structural form — a class instance, a function — is opaque and equal only to itself, so an unrecognised duplicate survives rather than a distinct value disappearing.
+
 There is deliberately no LLM "reduce" pass. A second, unvalidated model call would be nondeterministic and would reopen the failure modes `create()` exists to close.
 
 **Failures.** A chunk that exhausts its retries is recorded on `chunks[i].error` and skipped by default; the rest of the document still merges. Pass `onChunkError: "abort"` to throw on the first failure instead. An aborted `signal` always propagates.

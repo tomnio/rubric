@@ -1,4 +1,5 @@
 import { z, type ZodObject, type ZodRawShape } from "zod"
+import { currentContext } from "./context.js"
 
 const CITATION_FIELD = "substring_quotes"
 
@@ -7,33 +8,6 @@ const CITATION_FIELD_DESCRIPTION =
   "Every quote must appear in the context exactly as written."
 
 type Span = { start: number; end: number }
-
-/**
- * The source text a `cited()` validator checks quotes against.
- *
- * Pydantic carries this in `validation_context`; Zod's `safeParse` has no such
- * channel, so the active context lives in this module-scoped slot while
- * `extract()` runs the (synchronous) parse.
- */
-let activeContext: string | undefined
-
-/**
- * Run `fn` with `context` visible to every `cited()` validator that executes
- * inside it. Nested calls restore the previous value, so inner schemas see the
- * same context as the outer one.
- */
-export function withCitationContext<T>(
-  context: string | undefined,
-  fn: () => T,
-): T {
-  const previous = activeContext
-  activeContext = context
-  try {
-    return fn()
-  } finally {
-    activeContext = previous
-  }
-}
 
 /**
  * Add a verified `substring_quotes` field to an object schema.
@@ -51,7 +25,7 @@ export function cited<T extends ZodObject<ZodRawShape>>(schema: T) {
   })
 
   return extended.superRefine((value, ctx) => {
-    const context = activeContext
+    const context = currentContext().citation
     if (context === undefined) {
       return
     }

@@ -205,6 +205,39 @@ describe("cited", () => {
     expect(jsonSchemaFromZod(WithQuotes).properties).toHaveProperty("substring_quotes")
   })
 
+  it("keeps concurrent calls with different contexts isolated", async () => {
+    // Both calls parse at the same time with different sources. A shared
+    // module-global context would let one call read the other's source.
+    const alpha = "Alpha was a student in Toronto."
+    const beta = "Beta worked at Stitchfix and Facebook."
+
+    const slowClient = (quote: string): LLMClient => ({
+      async chatCompletionsCreate() {
+        // Yield so the two parses interleave inside the validator.
+        await new Promise((resolve) => setTimeout(resolve, 5))
+        return toolResponse({ statement: "x", substring_quotes: [quote] })
+      },
+    })
+
+    const [a, b] = await Promise.all([
+      wrap(slowClient("Alpha was a student")).create({
+        model: "test-model",
+        schema: Fact,
+        messages: [{ role: "user", content: alpha }],
+        context: alpha,
+      }),
+      wrap(slowClient("Beta worked at Stitchfix")).create({
+        model: "test-model",
+        schema: Fact,
+        messages: [{ role: "user", content: beta }],
+        context: beta,
+      }),
+    ])
+
+    expect(a.substring_quotes).toEqual(["Alpha was a student"])
+    expect(b.substring_quotes).toEqual(["Beta worked at Stitchfix"])
+  })
+
   it("keeps working when the base schema has a refine", async () => {
     const Strict = cited(
       z.object({

@@ -1,5 +1,5 @@
 import type { z } from "zod"
-import { withCitationContext } from "./citation.js"
+import { runWithContext } from "./context.js"
 import {
   JsonParseError,
   RetryExhaustedError,
@@ -48,10 +48,13 @@ export async function extract<T extends z.ZodType>(
     try {
       const json = coerceParsedValue(params.schema, handler.parseResponse(raw))
       // Includes .refine() / .superRefine(); those issues go into reask text.
-      // withCitationContext exposes `context` to cited() validators, standing in
-      // for Pydantic's validation_context (Zod's safeParse has no such channel).
-      const parsed = withCitationContext(params.context, () =>
-        params.schema.safeParse(json),
+      // safeParseAsync, not safeParse: llmRefine() refinements are async, and
+      // Zod throws if an async refinement runs during a synchronous parse.
+      // runWithContext carries the citation source and model to validators
+      // without exposing them on the schema (Zod has no validation_context).
+      const parsed = await runWithContext(
+        { citation: params.context, model: params.model },
+        () => params.schema.safeParseAsync(json),
       )
       if (!parsed.success) {
         throw new SchemaValidationError(

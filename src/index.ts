@@ -1,23 +1,11 @@
-import {
-  fromAnthropic,
-  isAnthropicMessagesClient,
-  type AnthropicMessagesClient,
-} from "./adapters/anthropic.js"
-import {
-  fromGemini,
-  isGeminiModelsClient,
-  type GeminiModelsClient,
-} from "./adapters/gemini.js"
-import {
-  fromOpenAI,
-  isLLMClient,
-  isOpenAIChatClient,
-  type OpenAIChatClient,
-} from "./adapters/openai.js"
+import type { AnthropicMessagesClient } from "./adapters/anthropic.js"
+import type { GeminiModelsClient } from "./adapters/gemini.js"
+import type { OpenAIChatClient } from "./adapters/openai.js"
+import { toLLMClient, type AnyClient } from "./client.js"
 import { extract } from "./extract.js"
 import { extractIterable } from "./iterable.js"
 import { extractPartial } from "./partial.js"
-import type { LLMClient, RubricClient, WrapOptions } from "./types.js"
+import type { RubricClient, WrapOptions } from "./types.js"
 
 export type {
   AttemptMeta,
@@ -78,31 +66,8 @@ export {
  * Accepts a fake `LLMClient`, OpenAI `chat.completions`, or Anthropic `messages`.
  * The original client is not mutated.
  */
-export function wrap(
-  client:
-    | LLMClient
-    | OpenAIChatClient
-    | AnthropicMessagesClient
-    | GeminiModelsClient,
-  options?: WrapOptions,
-): RubricClient {
-  let llm: LLMClient
-  let defaults = options
-  if (isLLMClient(client)) {
-    llm = client
-  } else if (isOpenAIChatClient(client)) {
-    llm = fromOpenAI(client)
-  } else if (isAnthropicMessagesClient(client)) {
-    llm = fromAnthropic(client)
-    defaults = { mode: "ANTHROPIC_TOOLS", ...options }
-  } else if (isGeminiModelsClient(client)) {
-    llm = fromGemini(client)
-    defaults = { mode: "GEMINI_JSON", ...options }
-  } else {
-    throw new Error(
-      "wrap() expects an LLMClient, OpenAI chat.completions, Anthropic messages, or Gemini models.generateContent client",
-    )
-  }
+export function wrap(client: AnyClient, options?: WrapOptions): RubricClient {
+  const { llm, defaults } = toLLMClient(client, options)
 
   return {
     create(params) {

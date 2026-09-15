@@ -311,13 +311,100 @@ describe("createDocument", () => {
         model: "test-model",
         instruction: "Extract.",
         schema: Invoice,
-        chunkSize: 9,
+        // One chunk, so the assertion is about the default schema rather than
+        // about how repeats across chunks merge.
+        chunkSize: 1000,
         overlap: 0,
-        chunker: fixedChunker(9),
+        chunker: fixedChunker(1000),
       },
       { mode: "TOOLS" },
     )
     expect(result.data).toEqual({ title: "Invoice", items: [{ id: 1 }] })
+  })
+})
+
+describe("createDocument overlap-aware dedupe", () => {
+  const LineItems = z.object({
+    items: z.array(z.object({ desc: z.string(), amount: z.number() })),
+  })
+
+  it("keeps two identical line items that sit in the same chunk", async () => {
+    // Regression: global dedupe treated the invoice's real second "Coffee"
+    // line as an overlap repeat and silently dropped it.
+    const client = chunkAwareClient([
+      {
+        items: [
+          { desc: "Coffee", amount: 5 },
+          { desc: "Coffee", amount: 5 },
+          { desc: "Tea", amount: 3 },
+        ],
+      },
+    ])
+    const result = await createDocument(
+      client,
+      {
+        document: DOC,
+        model: "test-model",
+        instruction: "Extract every line item.",
+        schema: LineItems,
+        chunkSize: 1000,
+        overlap: 0,
+        chunker: fixedChunker(1000),
+      },
+      { mode: "TOOLS" },
+    )
+    expect(result.data.items).toEqual([
+      { desc: "Coffee", amount: 5 },
+      { desc: "Coffee", amount: 5 },
+      { desc: "Tea", amount: 3 },
+    ])
+  })
+
+  it("drops the repeat that overlapping windows cause", async () => {
+    // Two windows that overlap by design, each reporting the same line.
+    const client = chunkAwareClient([
+      { items: [{ desc: "Coffee", amount: 5 }] },
+      { items: [{ desc: "Coffee", amount: 5 }] },
+    ])
+    const result = await createDocument(
+      client,
+      {
+        document: DOC,
+        model: "test-model",
+        instruction: "Extract every line item.",
+        schema: LineItems,
+        chunkSize: 10,
+        overlap: 5,
+        chunker: fixedChunker(10, 5),
+      },
+      { mode: "TOOLS" },
+    )
+    expect(result.data.items).toEqual([{ desc: "Coffee", amount: 5 }])
+  })
+
+  it("keeps every repeat when dedupe is none", async () => {
+    const client = chunkAwareClient([
+      { items: [{ desc: "Coffee", amount: 5 }] },
+      { items: [{ desc: "Coffee", amount: 5 }] },
+    ])
+    const result = await createDocument(
+      client,
+      {
+        document: DOC,
+        model: "test-model",
+        instruction: "Extract every line item.",
+        schema: LineItems,
+        chunkSize: 10,
+        overlap: 5,
+        chunker: fixedChunker(10, 5),
+        dedupe: "none",
+      },
+      { mode: "TOOLS" },
+    )
+    expect(result.data.items).toEqual([
+      { desc: "Coffee", amount: 5 },
+      { desc: "Coffee", amount: 5 },
+    ])
   })
 })
 

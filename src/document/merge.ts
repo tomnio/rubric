@@ -2,6 +2,31 @@ import type { z } from "zod"
 import { rootKind } from "../schema.js"
 import { DocumentMergeError, type DocumentChunkError } from "./errors.js"
 
+/** One chunk's contribution to the merge, with the window it was read from. */
+export type ChunkValue = {
+  value: unknown
+  /** Absolute offset of the chunk's window in the document. */
+  startIndex: number
+  endIndex: number
+}
+
+/**
+ * How array fields treat a value that more than one chunk reported.
+ *
+ * - `"overlap"` (default): a value seen in two *different* chunks counts once
+ *   when those chunks' windows overlap, because overlapping windows are two
+ *   views of the same text. A repeat inside a single chunk is kept — windowing
+ *   cannot have caused it.
+ * - `"none"`: concatenate and keep every repeat. Use when the document may
+ *   legitimately contain the same item twice.
+ */
+export type DedupeMode = "overlap" | "none"
+
+export type MergeOptions = {
+  /** Default: `"overlap"`. */
+  dedupe?: DedupeMode
+}
+
 /**
  * True for an object literal or `Object.create(null)` — a bag of own keys.
  *
@@ -126,22 +151,82 @@ function objectKey(value: object, identities: IdentityTable): string {
   return `opaque:${identity(value, identities)}`
 }
 
-/** Drop later duplicates, keeping first-occurrence order. */
-function dedupe(items: unknown[]): unknown[] {
-  const seen = new Set<string>()
-  // One identity table per call, so the same opaque instance is recognised
-  // across every item while two distinct instances stay distinct.
-  const identities: IdentityTable = { ids: new Map<unknown, number>(), next: 0 }
-  const out: unknown[] = []
-  for (const item of items) {
-    const key = dedupeKey(item, identities)
-    if (seen.has(key)) {
-      continue
+/** An array item, remembering which chunk reported it and where that chunk sat. */
+type TaggedItem = {
+  item: unknown
+  chunk: number
+  startIndex: number
+  endIndex: number
+  key: string
+}
+
+/** Two windows share text when their half-open ranges intersect. */
+function windowsOverlap(a: TaggedItem, b: TaggedItem): boolean {
+  return a.startIndex < b.endIndex && b.startIndex < a.endIndex
+}
+
+/**
+ * Concatenate the arrays chunks reported for one field, dropping the repeats
+ * that overlapping windows cause.
+ *
+ * The merge sees values, not positions, so it cannot tell "the overlap window
+ * re-reported this item" from "the document really holds this item twice". Two
+ * facts separate the cases well enough to act on:
+ *
+ * - A repeat **inside one chunk** is not an artifact of windowing — one window
+ *   is one reading of one stretch of text — so it is kept.
+ * - A repeat **across two chunks** is an artifact only if those chunks' windows
+ *   overlap, because only then did two windows read the same text.
+ *
+ * What is left is the inherent limit: two genuine duplicates that happen to sit
+ * in two overlapping chunks are still collapsed. With `dedupe: "none"` the
+ * caller can opt out entirely.
+ */
+function mergeArrayField(
+  chunks: ChunkValue[],
+  mode: DedupeMode,
+  identities: IdentityTable,
+): unknown[] {
+  const tagged: TaggedItem[] = []
+  chunks.forEach((chunk, index) => {
+    if (!Array.isArray(chunk.value)) {
+      return
     }
-    seen.add(key)
-    out.push(item)
+    for (const item of chunk.value) {
+      tagged.push({
+        item,
+        chunk: index,
+        startIndex: chunk.startIndex,
+        endIndex: chunk.endIndex,
+        key: dedupeKey(item, identities),
+      })
+    }
+  })
+
+  if (mode === "none") {
+    return tagged.map((entry) => entry.item)
   }
-  return out
+
+  // Per key, the occurrences still able to absorb a later repeat. A dropped
+  // occurrence stays here too: its window did hold the item, so a later window
+  // overlapping it may still be re-reporting that same sighting.
+  const open = new Map<string, TaggedItem[]>()
+  const kept: TaggedItem[] = []
+  for (const candidate of tagged) {
+    const pool = open.get(candidate.key) ?? []
+    const absorbed = pool.findIndex(
+      (previous) =>
+        previous.chunk !== candidate.chunk && windowsOverlap(previous, candidate),
+    )
+    if (absorbed === -1) {
+      kept.push(candidate)
+    } else {
+      pool.splice(absorbed, 1)
+    }
+    pool.push(candidate)
+    open.set(candidate.key, pool)
+  }
+  return kept.map((entry) => entry.item)
 }
 
 /**
@@ -149,8 +234,9 @@ function dedupe(items: unknown[]): unknown[] {
  *
  * Rules, decided per field by the runtime value:
  *
- * - **Array fields** are concatenated across chunks and deduplicated by deep
- *   structural equality.
+ * - **Array fields** are concatenated across chunks, and a value that two
+ *   chunks reported is dropped only when their windows overlap — see
+ *   `mergeArrayField`. `options.dedupe: "none"` keeps every repeat.
  * - **Every other field** takes the first non-null value seen, in chunk order.
  *   This includes nested objects, which are treated as atomic values.
  *
@@ -164,8 +250,13 @@ function dedupe(items: unknown[]): unknown[] {
  * Pure and synchronous: no LLM call, no schema needed. Callers validate the
  * result separately (see `mergeInto`).
  */
-export function mergeChunks(values: unknown[]): Record<string, unknown> {
-  const objects = values.filter(isPlainRecord)
+export function mergeChunks(
+  chunks: ChunkValue[],
+  options: MergeOptions = {},
+): Record<string, unknown> {
+  const mode = options.dedupe ?? "overlap"
+  const identities: IdentityTable = { ids: new Map<unknown, number>(), next: 0 }
+  const objects = chunks.map((chunk) => chunk.value).filter(isPlainRecord)
   const keys = new Set<string>()
   for (const object of objects) {
     for (const key of Object.keys(object)) {
@@ -175,29 +266,42 @@ export function mergeChunks(values: unknown[]): Record<string, unknown> {
 
   const merged: Record<string, unknown> = {}
   for (const key of keys) {
-    const seen = objects
-      .filter((object) => key in object)
-      .map((object) => object[key])
+    // Keep the chunk's window alongside its value: overlap-aware dedupe needs
+    // to know where each value was read from.
+    const seen = chunks.filter(
+      (chunk): chunk is ChunkValue & { value: Record<string, unknown> } =>
+        isPlainRecord(chunk.value) && key in chunk.value,
+    )
     if (seen.length === 0) {
       continue
     }
 
-    const present = seen.filter((value) => value !== null && value !== undefined)
+    const present = seen.filter(
+      (chunk) => chunk.value[key] !== null && chunk.value[key] !== undefined,
+    )
     if (present.length === 0) {
       // Every chunk reported null/undefined. Preserve an explicit null so a
       // `.nullable()` field validates instead of looking absent.
-      if (seen.some((value) => value === null)) {
+      if (seen.some((chunk) => chunk.value[key] === null)) {
         merged[key] = null
       }
       continue
     }
 
-    if (present.every(Array.isArray)) {
-      merged[key] = dedupe((present as unknown[][]).flat())
+    if (present.every((chunk) => Array.isArray(chunk.value[key]))) {
+      merged[key] = mergeArrayField(
+        present.map((chunk) => ({
+          value: chunk.value[key],
+          startIndex: chunk.startIndex,
+          endIndex: chunk.endIndex,
+        })),
+        mode,
+        identities,
+      )
       continue
     }
 
-    merged[key] = present[0]
+    merged[key] = present[0]?.value[key]
   }
 
   return merged
@@ -207,12 +311,14 @@ export function mergeChunks(values: unknown[]): Record<string, unknown> {
  * Merge per-chunk values when the schema root is an array.
  *
  * Chunks each report part of the list, so the parts concatenate — the same
- * rule array *fields* follow. Dedupe removes what overlapping windows report
- * twice.
+ * rule array *fields* follow, including overlap-aware dedupe.
  */
-function mergeRootArray(values: unknown[]): unknown {
-  const arrays = values.filter(Array.isArray) as unknown[][]
-  return dedupe(arrays.flat())
+function mergeRootArray(
+  chunks: ChunkValue[],
+  mode: DedupeMode,
+  identities: IdentityTable,
+): unknown {
+  return mergeArrayField(chunks, mode, identities)
 }
 
 /**
@@ -244,16 +350,19 @@ function mergeRootScalar(values: unknown[]): unknown {
  */
 export function mergeInto<T extends z.ZodType>(
   schema: T,
-  values: unknown[],
+  chunks: ChunkValue[],
   chunkErrors: DocumentChunkError[] = [],
+  options: MergeOptions = {},
 ): z.infer<T> {
+  const mode = options.dedupe ?? "overlap"
+  const identities: IdentityTable = { ids: new Map<unknown, number>(), next: 0 }
   const kind = rootKind(schema)
   const partial =
     kind === "object"
-      ? mergeChunks(values)
+      ? mergeChunks(chunks, options)
       : kind === "array"
-        ? mergeRootArray(values)
-        : mergeRootScalar(values)
+        ? mergeRootArray(chunks, mode, identities)
+        : mergeRootScalar(chunks.map((chunk) => chunk.value))
 
   const parsed = schema.safeParse(partial)
   if (!parsed.success) {

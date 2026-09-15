@@ -321,6 +321,28 @@ describe("createDocument", () => {
     )
     expect(result.data).toEqual({ title: "Invoice", items: [{ id: 1 }] })
   })
+
+  it("rejects a bad maxRetries before any chunk runs", async () => {
+    // Without an up-front check the failure would repeat per chunk and the
+    // catch would wrap the RangeError into a DocumentChunkError, burying it.
+    const client = chunkAwareClient([{ title: "T", items: [] }])
+    await expect(
+      createDocument(
+        client,
+        {
+          document: DOC,
+          model: "test-model",
+          instruction: "Extract.",
+          schema: Invoice,
+          chunkSize: 9,
+          overlap: 0,
+          chunker: fixedChunker(9),
+          maxRetries: -1,
+        },
+        { mode: "TOOLS" },
+      ),
+    ).rejects.toBeInstanceOf(RangeError)
+  })
 })
 
 describe("createDocument overlap-aware dedupe", () => {

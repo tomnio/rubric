@@ -49,13 +49,20 @@ export class SchemaValidationError extends Error {
 /** Thrown by create() when retryable failures exhaust maxRetries. */
 export class RetryExhaustedError extends Error {
   readonly attempts: number
-  readonly lastError: JsonParseError | SchemaValidationError
+  /**
+   * The last retryable failure, or `undefined` when no attempt ever ran.
+   *
+   * Optional because the constructor is public and a caller may build this
+   * error for a call that never reached the provider. Declaring it present
+   * would invite `error.lastError.issues` on a value that is not there.
+   */
+  readonly lastError: JsonParseError | SchemaValidationError | undefined
   readonly usage: TokenUsage | undefined
 
   constructor(
     message: string,
     attempts: number,
-    lastError: JsonParseError | SchemaValidationError,
+    lastError?: JsonParseError | SchemaValidationError,
     usage?: TokenUsage,
   ) {
     super(message)

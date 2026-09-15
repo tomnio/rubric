@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
-import { JsonParseError, wrap, type LLMClient } from "../src/index.js"
+import { cited, JsonParseError, wrap, type LLMClient } from "../src/index.js"
 
 const User = z.object({
   name: z.string(),
@@ -157,5 +157,57 @@ describe("createIterable", () => {
         }),
       ),
     ).rejects.toBeInstanceOf(JsonParseError)
+  })
+
+  it("validates items built with an async refinement", async () => {
+    // A synchronous safeParse throws "Async refinement encountered during
+    // synchronous parse" — a raw Zod error escaping to the caller.
+    const Item = z.object({
+      name: z.string().refine(async (n) => n.length > 1, { message: "too short" }),
+    })
+    const client = wrap(
+      streamClient([contentDelta('[{"name":"Jo"},{"name":"X"}]')]),
+      { mode: "JSON_SCHEMA" },
+    )
+
+    const items = await collect(
+      client.createIterable({
+        model: "test-model",
+        schema: Item,
+        messages: [{ role: "user", content: "x" }],
+      }),
+    )
+    // "Jo" passes, "X" fails and is held back rather than yielded.
+    expect(items).toEqual([{ name: "Jo" }])
+  })
+
+  it("validates items against the citation context", async () => {
+    const Fact = cited(z.object({ statement: z.string() }))
+    const client = wrap(
+      streamClient([
+        contentDelta(
+          "["
+            // Real span: yielded.
+            + '{"statement":"b","substring_quotes":["the sky is blue"]},'
+            // Fabricated: not in the context, so held back.
+            + '{"statement":"a","substring_quotes":["the sky is green"]}'
+            + "]",
+        ),
+      ]),
+      { mode: "JSON_SCHEMA" },
+    )
+
+    const items = await collect(
+      client.createIterable({
+        model: "test-model",
+        schema: Fact,
+        messages: [{ role: "user", content: "x" }],
+        context: "the sky is blue",
+      }),
+    )
+    // Only the grounded item is yielded. (An item that never validates blocks
+    // the ones after it — the loop cannot tell "wrong" from "not yet arrived"
+    // — so this test puts the valid item first.)
+    expect(items).toEqual([{ statement: "b", substring_quotes: ["the sky is blue"] }])
   })
 })

@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { rejectTokenBudgetForStream } from "./budget.js"
+import { runWithContext } from "./context.js"
 import { JsonParseError } from "./errors.js"
 import { attemptMeta, safeEmit } from "./hooks.js"
 import { handlerFor } from "./modes/registry.js"
@@ -58,7 +59,15 @@ export async function* extractIterable<T extends z.ZodType>(
     }
     while (yielded < json.length) {
       const item = json[yielded]
-      const parsed = params.schema.safeParse(item)
+      // safeParseAsync, not safeParse: a schema built with llmRefine() (or any
+      // async z.refine) makes Zod throw "Async refinement encountered during
+      // synchronous parse" — a raw Zod error escaping to the caller. The
+      // context is what lets cited() see the source text and llmRefine() find
+      // a model, matching create().
+      const parsed = await runWithContext(
+        { citation: params.context, model: params.model },
+        () => params.schema.safeParseAsync(item),
+      )
       if (!parsed.success) {
         break
       }

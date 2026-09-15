@@ -332,6 +332,11 @@ for await (const user of client.createIterable({ model, schema: User, messages }
 unfinished ones as previews, so a field that closed with a wrong type is
 dropped instead of shown as data. It does not reask.
 
+`createIterable` validates each item with the same schema — including
+`cited()` against `context` and `llmRefine()` — and yields only items that pass.
+An item that never validates holds back the ones after it, because the loop
+cannot tell "this one is wrong" from "this one has not finished arriving".
+
 Streaming works across all providers: OpenAI-shaped chunks (`delta.content` / tool
 `arguments`), Anthropic `input_json_delta.partial_json`, and Gemini
 `candidates[].content.parts` / `text` chunks.

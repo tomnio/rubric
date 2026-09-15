@@ -40,7 +40,7 @@ const user = await client.create({
 | **Citations** | `cited(User)` + `context` verifies model quotes against the source; fakes reask |
 | **LLM judge** | `llmRefine("rule", client)` validates a field with a second model call |
 | **Hooks** | `onRequest` / `onParseError` / `onSuccess` / `onUsage` (token totals across reasks) |
-| **Stream** | `createPartial()` incomplete objects; `createIterable()` complete list items |
+| **Stream** | `createPartial()` incomplete objects (closed subtrees validated); `createIterable()` complete list items |
 | **Images** | `imageUrl(url)` in `messages[].content` (Anthropic maps these to `image` / `source`) |
 
 Not included: a `from_provider("vendor/model")` router, CLI, batch jobs, or cache.
@@ -191,7 +191,7 @@ const user = await client.create({
 |---|---|---|
 | `TOOLS` | `tools` + `tool_choice` | `tool_calls[].function.arguments` |
 | `JSON_SCHEMA` | `response_format.json_schema` | `message.content` |
-| `MD_JSON` | system prompt + markdown fence | fenced JSON, else raw content |
+| `MD_JSON` | system prompt + markdown fence | last complete JSON span (fenced or raw) |
 | `ANTHROPIC_TOOLS` | `input_schema` + `tool_choice` | `content[].tool_use.input` |
 | `GEMINI_JSON` | `config.responseJsonSchema` | `text` or `candidates[].content.parts` |
 
@@ -293,6 +293,10 @@ for await (const user of client.createIterable({ model, schema: User, messages }
   // full User; schema is the item type, not z.array(User)
 }
 ```
+
+`createPartial` validates subtrees that have finished arriving and only keeps
+unfinished ones as previews, so a field that closed with a wrong type is
+dropped instead of shown as data. It does not reask.
 
 Streaming works across all providers: OpenAI-shaped chunks (`delta.content` / tool
 `arguments`), Anthropic `input_json_delta.partial_json`, and Gemini

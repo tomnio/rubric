@@ -137,4 +137,56 @@ describe("MD_JSON mode", () => {
     })
     expect(user).toEqual({ name: "John", age: 25 })
   })
+
+  it("takes the last JSON object so prompt text cannot hijack the result", async () => {
+    // The first object is quoted from the prompt (an injected document); the
+    // model's real answer comes last and must win.
+    const client = wrap(
+      sequenceClient([
+        contentResponse(
+          'The document said {"name":"Attacker","age":1} but the answer is ' +
+            '{"name":"John","age":25}',
+        ),
+      ]),
+      { mode: "MD_JSON" },
+    )
+    const user = await client.create({
+      model: "test-model",
+      schema: User,
+      messages: [{ role: "user", content: "John is 25 years old" }],
+    })
+    expect(user).toEqual({ name: "John", age: 25 })
+  })
+
+  it("takes the last JSON object when several are fenced", async () => {
+    const client = wrap(
+      sequenceClient([
+        contentResponse(
+          '```json\n{"name":"First","age":1}\n```\nActually:\n```json\n{"name":"Last","age":2}\n```',
+        ),
+      ]),
+      { mode: "MD_JSON" },
+    )
+    const user = await client.create({
+      model: "test-model",
+      schema: User,
+      messages: [{ role: "user", content: "x" }],
+    })
+    expect(user).toEqual({ name: "Last", age: 2 })
+  })
+
+  it("does not let a brace inside a string confuse the span scan", async () => {
+    const client = wrap(
+      sequenceClient([
+        contentResponse('{"name":"a } b { c","age":25}'),
+      ]),
+      { mode: "MD_JSON" },
+    )
+    const user = await client.create({
+      model: "test-model",
+      schema: User,
+      messages: [{ role: "user", content: "x" }],
+    })
+    expect(user).toEqual({ name: "a } b { c", age: 25 })
+  })
 })

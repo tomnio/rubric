@@ -10,7 +10,89 @@ import {
 } from "./helpers.js"
 import type { ModeHandler } from "./types.js"
 
-const FENCE = /```(?:json)?\s*([\s\S]*?)```/i
+/**
+ * Take the LAST complete JSON span, not the first.
+ *
+ * The model's own answer comes last. JSON appearing earlier may have been
+ * copied from the prompt — a source document, a previous turn — and a crafted
+ * document could place a fake object there to hijack the parse. Python
+ * Instructor's `extract_json_from_codeblock` makes the same choice for the
+ * same reason.
+ *
+ * Scans for balanced `{}` / `[]` spans, skipping string contents, and returns
+ * the last one that parses. Mirrors Python's `raw_decode` loop, where a value
+ * ends at its closing bracket and trailing text is ignored.
+ */
+function lastJsonSpan(text: string): unknown | undefined {
+  let last: unknown
+  let found = false
+  let index = 0
+
+  while (index < text.length) {
+    const char = text[index]
+    if (char !== "{" && char !== "[") {
+      index += 1
+      continue
+    }
+    const end = matchingBracketEnd(text, index)
+    if (end === -1) {
+      index += 1
+      continue
+    }
+    try {
+      last = JSON.parse(text.slice(index, end + 1)) as unknown
+      found = true
+    } catch {
+      // Balanced but not valid JSON (e.g. `{not json}`); keep scanning.
+    }
+    index = end + 1
+  }
+
+  return found ? last : undefined
+}
+
+/** Index of the bracket closing the one at `start`, or -1 if unbalanced. */
+function matchingBracketEnd(text: string, start: number): number {
+  const stack: string[] = []
+  let inString = false
+  let escaped = false
+
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index] as string
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (char === "\\") {
+        escaped = true
+      } else if (char === '"') {
+        inString = false
+      }
+      continue
+    }
+    if (char === '"') {
+      inString = true
+      continue
+    }
+    if (char === "{") {
+      stack.push("}")
+      continue
+    }
+    if (char === "[") {
+      stack.push("]")
+      continue
+    }
+    if (char === "}" || char === "]") {
+      if (stack.pop() !== char) {
+        return -1
+      }
+      if (stack.length === 0) {
+        return index
+      }
+    }
+  }
+
+  return -1
+}
 
 function instruction(schema: ZodTypeAny): string {
   const jsonSchema = JSON.stringify(jsonSchemaFromZod(schema), null, 2)
@@ -43,13 +125,12 @@ export const mdJsonHandler: ModeHandler = {
       throw new JsonParseError("Response has no JSON content", raw)
     }
 
-    const fenced = content.match(FENCE)
-    if (fenced?.[1] !== undefined) {
-      try {
-        return JSON.parse(fenced[1]) as unknown
-      } catch {
-        // Fall through and try the full message.
-      }
+    // The last valid span wins, whether or not it sits in a fence. Scanning the
+    // whole message is what makes a prompt-embedded object unable to hijack the
+    // result: the model's own answer is what comes last.
+    const span = lastJsonSpan(content)
+    if (span !== undefined) {
+      return span
     }
 
     return parseJsonText(content, raw)

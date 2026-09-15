@@ -43,7 +43,7 @@ const user = await client.create({
 | **Token budget** | `tokenBudget` caps cumulative tokens; the loop stops instead of reasking |
 | **Stream** | `createPartial()` incomplete objects (closed subtrees validated); `createIterable()` complete list items |
 | **Images** | `imageUrl(url)` in `messages[].content` (Anthropic maps these to `image` / `source`) |
-| **Documents** | `createDocument()` splits a long text, extracts per chunk, and merges — `@tomnio/rubric/document` |
+| **Documents** | `createDocument()` splits a long text, extracts per chunk, and merges — `@tomnio/rubric/document` (unreleased; see [Quick start](#quick-start)) |
 
 Not included: a `from_provider("vendor/model")` router, CLI, batch jobs, or cache.
 
@@ -61,6 +61,19 @@ pnpm add @google/genai
 ```
 
 `zod` is required and must be **3.x** (`^3.24.0` or `3.25.x`). Bare `pnpm add zod` currently installs Zod 4, which does not satisfy the peer range. `openai` / `@anthropic-ai/sdk` / `@google/genai` are optional peers.
+
+> **The `./document` entry point is not published yet.** The latest release
+> (`0.6.0`) exports only the root import, so `import "@tomnio/rubric/document"`
+> fails with `ERR_PACKAGE_PATH_NOT_EXPORTED` for an npm install. `create()` works
+> from npm today; `createDocument()` needs a build of `main`:
+
+```bash
+git clone git@github.com:tomnio/rubric.git
+cd rubric
+pnpm install
+pnpm build
+pnpm add /path/to/rubric    # in your own project
+```
 
 From a clone (development):
 
@@ -85,9 +98,10 @@ OPENAI_API_KEY=... pnpm example:extract-user
 OPENAI_API_KEY=... IMAGE_URL=https://... pnpm example:extract-image
 ANTHROPIC_API_KEY=... pnpm example:extract-user-anthropic
 ANTHROPIC_API_KEY=... IMAGE_URL=https://... pnpm example:extract-image-anthropic
+OPENAI_API_KEY=... pnpm example:extract-document   # whole document, needs @chonkiejs/core
 ```
 
-Optional: `OPENAI_MODEL` (default `gpt-5.6-luna`), `ANTHROPIC_MODEL` (default `claude-sonnet-4-6`).
+Optional: `OPENAI_MODEL` (default `gpt-5.6-luna`), `ANTHROPIC_MODEL` (default `claude-sonnet-4-6`), `OPENAI_BASE_URL` and `OPENAI_MODE` for a gateway (see [Providers](#providers)).
 
 ## Providers
 
@@ -379,6 +393,14 @@ await client.create({
 pnpm add @chonkiejs/core   # optional, only needed for createDocument()
 ```
 
+`createDocument()` is **not in the published package yet** — the latest release exports only the root import. Use a build of `main` (see [Quick start](#quick-start)); once a release includes it, the import is:
+
+```ts
+import { createDocument } from "@tomnio/rubric/document"
+```
+
+Full working example: [`examples/extract-document.ts`](examples/extract-document.ts) (`pnpm example:extract-document`).
+
 ```ts
 import { createDocument } from "@tomnio/rubric/document"
 import { z } from "zod"
@@ -410,6 +432,21 @@ chunks[0]      // { index, startIndex, endIndex, value, usage }
 ```
 
 `startIndex` / `endIndex` are absolute offsets into the document you passed in, so you can trace any value back to where it came from.
+
+`createDocument()` takes the same options as `create()` (`maxRetries`, `mode`, `temperature`, `max_tokens`, `top_p`, `signal`, `tokenBudget`, `hooks`) plus:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `document` | — | The plain text to extract from. |
+| `instruction` | — | Sent to the model alongside each chunk. |
+| `chunkSize` | `2000` | Target characters per chunk. |
+| `overlap` | `100` | Characters bled outward on each side, for boundary recovery. |
+| `chunkSchema` | `schema` | Schema used to validate each chunk. Pass a chunk-tolerant one. |
+| `chunker` | Chonkie | Replace the splitter. See **Chunking** below. |
+| `onChunkError` | `"skip"` | `"skip"` records the failure and continues; `"abort"` throws. |
+| `dedupe` | `"overlap"` | How to treat a repeat two chunks reported. See below. |
+
+`tokenBudget` is **per chunk**, not per document (see [Cost](#documents)). `maxRetries` is validated up front, before any chunk runs, so a bad value fails once with `TypeError` / `RangeError` instead of being buried in a per-chunk error.
 
 **Per-chunk hooks.** Hooks fire during the call, so they cannot wait for `result.chunks[]`. Every hook's `AttemptMeta` therefore carries a `chunk` descriptor for the chunk that fired it:
 

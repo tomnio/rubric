@@ -139,7 +139,7 @@ describe.skipIf(!hasChonkie)("createDocument with the real chunker", () => {
 
 describe("defaultChunker", () => {
   it.skipIf(!hasChonkie)("is exported for direct use", async () => {
-    const chunks = await defaultChunker(DOC, { chunkSize: 40, overlap: 0 })
+    const chunks = await defaultChunker(DOC, { chunkSize: 40 })
     expect(chunks.length).toBeGreaterThan(0)
     expect(chunks.map((chunk) => chunk.text).join("")).toBe(DOC)
   })

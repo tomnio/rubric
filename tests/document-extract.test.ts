@@ -15,15 +15,17 @@ import {
   type RequestKwargs,
 } from "../src/index.js"
 
-/** Split into fixed-width windows, so tests control chunk boundaries exactly. */
-function fixedChunker(size: number, overlap = 0): Chunker {
+/**
+ * Split into fixed-width, contiguous windows, so tests control chunk
+ * boundaries exactly. Widening is the pipeline's job, so this takes no
+ * `overlap` — the same contract a user's custom chunker now has.
+ */
+function fixedChunker(size: number): Chunker {
   return async (document) => {
     const chunks: DocumentChunk[] = []
     for (let start = 0; start < document.length; start += size) {
       const end = Math.min(document.length, start + size)
-      const startIndex = Math.max(0, start - overlap)
-      const endIndex = Math.min(document.length, end + overlap)
-      chunks.push({ text: document.slice(startIndex, endIndex), startIndex, endIndex })
+      chunks.push({ text: document.slice(start, end), startIndex: start, endIndex: end })
     }
     return chunks
   }
@@ -555,7 +557,7 @@ describe("createDocument overlap-aware dedupe", () => {
         schema: LineItems,
         chunkSize: 10,
         overlap: 5,
-        chunker: fixedChunker(10, 5),
+        chunker: fixedChunker(10),
       },
       { mode: "TOOLS" },
     )
@@ -576,7 +578,7 @@ describe("createDocument overlap-aware dedupe", () => {
         schema: LineItems,
         chunkSize: 10,
         overlap: 5,
-        chunker: fixedChunker(10, 5),
+        chunker: fixedChunker(10),
         dedupe: "none",
       },
       { mode: "TOOLS" },

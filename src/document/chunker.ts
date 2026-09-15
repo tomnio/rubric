@@ -14,15 +14,17 @@ export type DocumentChunk = {
 export type ChunkerOptions = {
   /** Target chunk size in characters (see `defaultChunker` on the unit). */
   chunkSize: number
-  /**
-   * Characters bled outward on each side, so content cut at a boundary still
-   * appears whole in one of the overlapping windows.
-   */
-  overlap: number
 }
 
 /**
  * Split a document into positioned chunks.
+ *
+ * A chunker only splits and positions; it does **not** apply `overlap`. That is
+ * the pipeline's job (`chunkDocument`), so boundary recovery works for every
+ * chunker by construction rather than being each implementation's
+ * responsibility to remember. This is why `overlap` is absent from
+ * `ChunkerOptions`: a chunker that widened its own windows would be widened a
+ * second time, so the option is kept out of reach.
  *
  * Injectable so tests can supply a deterministic splitter and never touch the
  * WASM chunker.
@@ -62,7 +64,7 @@ function widen(
  * The chunker's default tokenizer is character-based, so `chunkSize` is a
  * character count, not a token count.
  */
-export const defaultChunker: Chunker = async (document, { chunkSize, overlap }) => {
+export const defaultChunker: Chunker = async (document, { chunkSize }) => {
   let RecursiveChunker: typeof import("@chonkiejs/core").RecursiveChunker
   try {
     ;({ RecursiveChunker } = await import("@chonkiejs/core"))
@@ -76,31 +78,31 @@ export const defaultChunker: Chunker = async (document, { chunkSize, overlap }) 
 
   const chunker = await RecursiveChunker.create({ chunkSize })
   const chunks = await chunker.chunk(document)
-  const positioned = chunks.map((chunk) => ({
+  return chunks.map((chunk) => ({
     text: chunk.text,
     startIndex: chunk.startIndex,
     endIndex: chunk.endIndex,
   }))
-  if (overlap <= 0) {
-    return positioned
-  }
-  return positioned.map((chunk) => widen(document, chunk, overlap))
 }
 
 /**
- * Split `document` into positioned chunks, widening each window by `overlap`.
+ * Split `document` into positioned chunks, then widen every window by
+ * `overlap`. The widening happens here rather than inside a chunker, so a
+ * custom chunker gets boundary recovery without implementing it.
+ *
  * Chunking a blank document yields no chunks.
  */
 export async function chunkDocument(
   document: string,
-  options: ChunkerOptions & { chunker?: Chunker },
+  options: ChunkerOptions & { overlap: number; chunker?: Chunker },
 ): Promise<DocumentChunk[]> {
   if (document.trim().length === 0) {
     return []
   }
   const chunker = options.chunker ?? defaultChunker
-  return chunker(document, {
-    chunkSize: options.chunkSize,
-    overlap: options.overlap,
-  })
+  const chunks = await chunker(document, { chunkSize: options.chunkSize })
+  if (options.overlap <= 0) {
+    return chunks
+  }
+  return chunks.map((chunk) => widen(document, chunk, options.overlap))
 }

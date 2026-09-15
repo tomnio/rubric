@@ -10,6 +10,7 @@ import type { RubricClient, WrapOptions } from "./types.js"
 export type {
   AttemptMeta,
   CallOptions,
+  ChunkMeta,
   ContentBlock,
   CreateParams,
   DeepPartial,

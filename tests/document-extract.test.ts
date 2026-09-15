@@ -8,7 +8,12 @@ import {
   type Chunker,
   type DocumentChunk,
 } from "../src/document/index.js"
-import type { LLMClient, RequestKwargs } from "../src/index.js"
+import {
+  wrap,
+  type AttemptMeta,
+  type LLMClient,
+  type RequestKwargs,
+} from "../src/index.js"
 
 /** Split into fixed-width windows, so tests control chunk boundaries exactly. */
 function fixedChunker(size: number, overlap = 0): Chunker {
@@ -580,6 +585,107 @@ describe("createDocument overlap-aware dedupe", () => {
       { desc: "Coffee", amount: 5 },
       { desc: "Coffee", amount: 5 },
     ])
+  })
+})
+
+describe("createDocument hook attribution", () => {
+  it("gives every hook the chunk its event belongs to", async () => {
+    // Three chunks; the hook must be able to tell them apart, which a plain
+    // AttemptMeta cannot: attemptNumber resets at each chunk boundary.
+    const client = chunkAwareClient([
+      { title: "T", items: [] },
+      { title: "T", items: [] },
+      { title: "T", items: [] },
+    ])
+    const metas: AttemptMeta[] = []
+    await createDocument(
+      client,
+      {
+        document: "AAAA BBBB CCCC",
+        model: "test-model",
+        instruction: "Extract.",
+        schema: ChunkInvoice,
+        chunkSize: 5,
+        overlap: 0,
+        chunker: fixedChunker(5),
+        hooks: {
+          onSuccess: (_value, meta) => metas.push(meta),
+        },
+      },
+      { mode: "TOOLS" },
+    )
+
+    expect(metas.map((meta) => meta.chunk?.index)).toEqual([0, 1, 2])
+    // `total` makes progress computable without knowing the chunk count.
+    expect(metas.map((meta) => meta.chunk?.total)).toEqual([3, 3, 3])
+    // Offsets are absolute into the document, same as result.chunks[].
+    expect(metas.map((meta) => [meta.chunk?.startIndex, meta.chunk?.endIndex])).toEqual([
+      [0, 5],
+      [5, 10],
+      [10, 14],
+    ])
+  })
+
+  it("keeps the chunk on every reask, not just the first attempt", async () => {
+    // The issue's core complaint: a counter incremented per hook call reports
+    // "chunk 6" for a two-chunk document, because one chunk emits several
+    // parse errors. Each of those must name the chunk it came from.
+    const client = chunkAwareClient([
+      // Chunk 0: two failures, then a pass.
+      { title: 1 },
+      { title: 2 },
+      { title: "T", items: [] },
+      // Chunk 1: one failure, then a pass.
+      { title: 3 },
+      { title: "T", items: [] },
+    ])
+    const seen: Array<{ index: number | undefined; attempt: number }> = []
+    await createDocument(
+      client,
+      {
+        document: "AAAA BBBB",
+        model: "test-model",
+        instruction: "Extract.",
+        schema: ChunkInvoice,
+        chunkSize: 5,
+        overlap: 0,
+        chunker: fixedChunker(5),
+        maxRetries: 3,
+        hooks: {
+          onParseError: (_error, meta) => {
+            seen.push({ index: meta.chunk?.index, attempt: meta.attemptNumber })
+          },
+        },
+      },
+      { mode: "TOOLS" },
+    )
+
+    // attemptNumber restarts at each chunk; chunk.index is what disambiguates.
+    expect(seen).toEqual([
+      { index: 0, attempt: 1 },
+      { index: 0, attempt: 2 },
+      { index: 1, attempt: 1 },
+    ])
+  })
+
+  it("leaves chunk absent for a plain create() call", async () => {
+    // The document concept must not leak into the single-call path, so a
+    // create() caller sees exactly the meta it saw before.
+    const client = wrap(chunkAwareClient([{ title: "T", items: [] }]), {
+      hooks: {
+        onSuccess: (_value, meta) => {
+          captured = meta
+        },
+      },
+    })
+    let captured: AttemptMeta | undefined
+    await client.create({
+      model: "test-model",
+      schema: ChunkInvoice,
+      messages: [{ role: "user", content: "x" }],
+    })
+    expect(captured).toBeDefined()
+    expect("chunk" in (captured as AttemptMeta)).toBe(false)
   })
 })
 

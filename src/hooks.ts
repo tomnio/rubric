@@ -1,12 +1,22 @@
-import type { AttemptMeta } from "./types.js"
+import type { AttemptMeta, ChunkMeta } from "./types.js"
 
-/** Build the per-attempt context passed to every hook. */
+/**
+ * Build the per-attempt context passed to every hook.
+ *
+ * `chunk` is passed only by `createDocument()`, which runs one `create()` per
+ * chunk. `create()` omits it, so the key is absent rather than undefined.
+ */
 export function attemptMeta(
   attemptNumber: number,
   maxAttempts: number,
   isLastAttempt: boolean,
+  chunk?: ChunkMeta,
 ): AttemptMeta {
-  return { attemptNumber, maxAttempts, isLastAttempt }
+  const meta: AttemptMeta = { attemptNumber, maxAttempts, isLastAttempt }
+  if (chunk !== undefined) {
+    meta.chunk = chunk
+  }
+  return meta
 }
 
 /**

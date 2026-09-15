@@ -4,6 +4,7 @@ import {
   createDocument,
   DocumentChunkError,
   DocumentMergeError,
+  DocumentNoDataError,
   type Chunker,
   type DocumentChunk,
 } from "../src/document/index.js"
@@ -231,7 +232,7 @@ describe("createDocument", () => {
     ).rejects.toBeInstanceOf(DocumentMergeError)
   })
 
-  it("throws DocumentMergeError for a blank document", async () => {
+  it("throws DocumentNoDataError for a blank document", async () => {
     const client = chunkAwareClient([{ title: "T", items: [] }])
     await expect(
       createDocument(
@@ -246,7 +247,7 @@ describe("createDocument", () => {
         },
         { mode: "TOOLS" },
       ),
-    ).rejects.toBeInstanceOf(DocumentMergeError)
+    ).rejects.toBeInstanceOf(DocumentNoDataError)
   })
 
   it("propagates an abort that happens mid-flight instead of recording a chunk error", async () => {
@@ -342,6 +343,158 @@ describe("createDocument", () => {
         { mode: "TOOLS" },
       ),
     ).rejects.toBeInstanceOf(RangeError)
+  })
+})
+
+describe("createDocument with nothing to merge", () => {
+  /** A schema with no required field, which `{}` satisfies. */
+  const AllOptional = z.object({ title: z.string().optional() })
+
+  it("throws DocumentNoDataError when every chunk fails", async () => {
+    // The schema would have accepted `{}`, so this used to return a
+    // successful-looking empty object while no answer ever arrived.
+    const client = chunkAwareClient([new Error("network down")])
+    try {
+      await createDocument(
+        client,
+        {
+          document: "a|b|c",
+          model: "test-model",
+          instruction: "Extract.",
+          schema: AllOptional,
+          chunkSize: 3,
+          overlap: 0,
+          chunker: fixedChunker(3),
+          maxRetries: 0,
+        },
+        { mode: "TOOLS" },
+      )
+      throw new Error("expected a throw")
+    } catch (error) {
+      expect(error).toBeInstanceOf(DocumentNoDataError)
+      const noData = error as DocumentNoDataError
+      expect(noData.reason).toBe("all-chunks-failed")
+      expect(noData.chunkErrors.length).toBeGreaterThan(0)
+    }
+  })
+
+  it("names the cause rather than blaming the schema", async () => {
+    const client = chunkAwareClient([new Error("network down")])
+    await expect(
+      createDocument(
+        client,
+        {
+          document: "a|b|c",
+          model: "test-model",
+          instruction: "Extract.",
+          schema: AllOptional,
+          chunkSize: 3,
+          overlap: 0,
+          chunker: fixedChunker(3),
+          maxRetries: 0,
+        },
+        { mode: "TOOLS" },
+      ),
+    ).rejects.toThrow(/chunk/i)
+  })
+
+  it("throws DocumentNoDataError for an empty document, with no chunks", async () => {
+    const client = chunkAwareClient([{ title: "T" }])
+    try {
+      await createDocument(
+        client,
+        {
+          document: "   \n\t ",
+          model: "test-model",
+          instruction: "Extract.",
+          schema: AllOptional,
+        },
+        { mode: "TOOLS" },
+      )
+      throw new Error("expected a throw")
+    } catch (error) {
+      expect(error).toBeInstanceOf(DocumentNoDataError)
+      const noData = error as DocumentNoDataError
+      expect(noData.reason).toBe("empty-document")
+      expect(noData.chunkErrors).toEqual([])
+      expect(noData.usage.totalTokens).toBe(0)
+    }
+  })
+
+  it("still reports usage spent on chunks that all failed", async () => {
+    // The run cost tokens even though it produced nothing, so the error must
+    // not drop that on the floor. A payload that fails validation is used
+    // rather than a thrown provider error, because only a real response carries
+    // usage — a client that throws never reported any tokens.
+    const client = chunkAwareClient([{ title: 123 }])
+    try {
+      await createDocument(
+        client,
+        {
+          document: "a|b|c",
+          model: "test-model",
+          instruction: "Extract.",
+          schema: AllOptional,
+          chunkSize: 3,
+          overlap: 0,
+          chunker: fixedChunker(3),
+          maxRetries: 0,
+        },
+        { mode: "TOOLS" },
+      )
+      throw new Error("expected a throw")
+    } catch (error) {
+      expect(error).toBeInstanceOf(DocumentNoDataError)
+      const noData = error as DocumentNoDataError
+      expect(noData.reason).toBe("all-chunks-failed")
+      expect(noData.usage.totalTokens).toBeGreaterThan(0)
+    }
+  })
+
+  it("returns data as usual when at least one chunk succeeds", async () => {
+    // The guard fires only when nothing succeeded, not merely when some failed.
+    const client = chunkAwareClient([
+      new Error("boom"),
+      { title: "Invoice" },
+    ])
+    const result = await createDocument(
+      client,
+      {
+        document: "AAAA BBBB",
+        model: "test-model",
+        instruction: "Extract.",
+        schema: AllOptional,
+        chunkSize: 5,
+        overlap: 0,
+        chunker: fixedChunker(5),
+        maxRetries: 0,
+      },
+      { mode: "TOOLS" },
+    )
+    expect(result.data).toEqual({ title: "Invoice" })
+    expect(result.chunks.filter((c) => c.error)).toHaveLength(1)
+  })
+
+  it("still throws DocumentMergeError when chunks succeeded but the merge fails", async () => {
+    // A schema problem is a different failure: the chunks produced values, so
+    // it must not be reported as "no data".
+    const client = chunkAwareClient([{ title: null, items: [] }])
+    await expect(
+      createDocument(
+        client,
+        {
+          document: DOC,
+          model: "test-model",
+          instruction: "Extract.",
+          schema: Invoice,
+          chunkSchema: ChunkInvoice,
+          chunkSize: 9,
+          overlap: 0,
+          chunker: fixedChunker(9),
+        },
+        { mode: "TOOLS" },
+      ),
+    ).rejects.toBeInstanceOf(DocumentMergeError)
   })
 })
 

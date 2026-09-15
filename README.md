@@ -430,6 +430,8 @@ Use `meta.chunk.index`, **not** a counter you increment per hook call. `attemptN
 
 **Chunking.** The default chunker is `RecursiveChunker` from `@chonkiejs/core`, which splits on paragraph, then sentence, then punctuation. Its default tokenizer is character-based, so `chunkSize` counts **characters**. `overlap` widens each chunk's window over the original text, so content cut at a boundary still appears whole in one of the overlapping windows. Pass your own `chunker` to split differently.
 
+A `Chunker` only **splits and positions** — it does not apply `overlap`. `createDocument()` widens whatever chunks come back, so boundary recovery works for every chunker, including one that ignores overlap entirely. `overlap` is deliberately **not** passed to a chunker (its options are just `{ chunkSize }`), because a chunker that widened its own windows would be widened a second time. If you are migrating a custom chunker that used to widen, delete that step; it now happens for you.
+
 **Merging is deterministic and does not call the model.** The strategy follows the schema's root shape:
 
 | Root | Rule |

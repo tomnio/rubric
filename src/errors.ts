@@ -75,6 +75,54 @@ export class RetryExhaustedError extends Error {
 }
 
 /**
+ * Thrown when the provider stopped at its output token limit, so the answer is
+ * cut off rather than wrong.
+ *
+ * Not retried, and deliberately not a `RetryExhaustedError`: a retry sends the
+ * same `max_tokens` and is cut the same way, so spending more attempts only
+ * costs more. The fix — a larger `max_tokens`, or a smaller schema — can only
+ * be made by the caller, which is why this fails on the first attempt instead
+ * of after `maxRetries`.
+ *
+ * Without this, a truncated response reaches the reask loop as a JSON parse
+ * error and the model is told to "return valid JSON" — advice it cannot act on,
+ * because the JSON was never finished.
+ */
+export class OutputTruncatedError extends Error {
+  /**
+   * The marker the provider used, e.g. `"length"` (OpenAI), `"max_tokens"`
+   * (Anthropic), `"MAX_TOKENS"` (Gemini).
+   */
+  readonly reason: string
+  /** The truncated response, so a caller can salvage what did arrive. */
+  readonly raw: unknown
+  readonly attempts: number
+  readonly usage: TokenUsage | undefined
+  /** The parse / validation failure the truncation caused, when there was one. */
+  readonly cause: unknown
+
+  constructor(
+    message: string,
+    details: {
+      reason: string
+      raw: unknown
+      attempts: number
+      usage?: TokenUsage
+      cause?: unknown
+    },
+  ) {
+    super(message)
+    this.name = "OutputTruncatedError"
+    this.reason = details.reason
+    this.raw = details.raw
+    this.attempts = details.attempts
+    this.usage = details.usage
+    this.cause = details.cause
+    Object.setPrototypeOf(this, new.target.prototype)
+  }
+}
+
+/**
  * Base for token budget failures. Carries the usage snapshot at the moment the
  * guardrail fired, so callers can log what was spent before the abort.
  */

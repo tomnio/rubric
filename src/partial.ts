@@ -1,13 +1,14 @@
 import type { z } from "zod"
 import { rejectTokenBudgetForStream } from "./budget.js"
 import { JsonCompleteness } from "./completeness.js"
-import { JsonParseError } from "./errors.js"
+import { JsonParseError, OutputTruncatedError } from "./errors.js"
 import { attemptMeta, safeEmit } from "./hooks.js"
 import { handlerFor } from "./modes/registry.js"
 import { applyRequestExtras, mergeSamplingExtras } from "./request.js"
 import { coerceParsedValue } from "./schema.js"
 import { buildSnapshot } from "./snapshot.js"
 import { jsonSlice, parseIncomplete } from "./stream-json.js"
+import { truncationReason } from "./truncation.js"
 import type {
   CreateParams,
   DeepPartial,
@@ -57,6 +58,11 @@ export async function* extractPartial<T extends z.ZodType>(
   let buffer = ""
   let lastSerialized = ""
   let usage = emptyUsage()
+  // The marker on the final chunk, if the provider stopped at its output cap.
+  // Partial output is this call's normal shape, so a truncated stream is not an
+  // error by itself — but if nothing was ever parseable, "truncated" is the
+  // honest reason, not "no parseable JSON".
+  let truncated: string | undefined
 
   params.signal?.throwIfAborted()
   for await (const chunk of client.chatCompletionsStream(
@@ -64,6 +70,7 @@ export async function* extractPartial<T extends z.ZodType>(
     params.signal ? { signal: params.signal } : undefined,
   )) {
     usage = mergeChunkUsage(usage, chunk)
+    truncated = truncationReason(chunk) ?? truncated
     buffer += handler.deltaFromChunk(chunk)
 
     // The tracker reads the same slice the parser does, so paths line up.
@@ -93,6 +100,12 @@ export async function* extractPartial<T extends z.ZodType>(
     attemptMeta(1, 1, true),
   ])
   if (lastSerialized === "") {
+    if (truncated !== undefined) {
+      throw new OutputTruncatedError(
+        `Output was cut off by the provider's token limit (${truncated}) before any JSON arrived. Raise max_tokens, or extract a smaller schema.`,
+        { reason: truncated, raw: buffer, attempts: 1 },
+      )
+    }
     throw new JsonParseError("Stream ended without parseable JSON", buffer)
   }
 }

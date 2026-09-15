@@ -66,6 +66,15 @@ export function addUsage(
 }
 
 /**
+ * Whether a response carried usage metadata at all. A budget can only be
+ * enforced when every attempt reported counts, so callers track this per
+ * attempt and fail closed once it goes false.
+ */
+export function hasUsage(raw: unknown): boolean {
+  return readUsage(raw) !== undefined
+}
+
+/**
  * Merge usage from a stream chunk. OpenAI sends full totals on the last
  * chunk; Anthropic sends input on message_start and cumulative output on
  * message_delta. Do not increment attempts per chunk.

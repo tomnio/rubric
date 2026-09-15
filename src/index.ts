@@ -42,6 +42,9 @@ export {
   JsonParseError,
   RetryExhaustedError,
   SchemaValidationError,
+  TokenBudgetError,
+  TokenBudgetExceeded,
+  TokenUsageUnavailableError,
 } from "./errors.js"
 
 export {

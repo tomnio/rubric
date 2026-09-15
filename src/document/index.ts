@@ -5,12 +5,13 @@ import type { CreateParams, Hooks, Message, WrapOptions } from "../types.js"
 import { emptyUsage, sumUsage, type TokenUsage } from "../usage.js"
 import { chunkDocument, type Chunker } from "./chunker.js"
 import { DocumentChunkError } from "./errors.js"
-import { mergeInto } from "./merge.js"
+import { mergeInto, type ChunkValue, type DedupeMode } from "./merge.js"
 
 export { chunkDocument, defaultChunker } from "./chunker.js"
 export type { Chunker, ChunkerOptions, DocumentChunk } from "./chunker.js"
 export { DocumentChunkError, DocumentMergeError } from "./errors.js"
 export { mergeChunks, mergeInto } from "./merge.js"
+export type { ChunkValue, DedupeMode, MergeOptions } from "./merge.js"
 
 const DEFAULT_CHUNK_SIZE = 2000
 const DEFAULT_OVERLAP = 100
@@ -74,6 +75,16 @@ export type DocumentParams<T extends z.ZodType> = Omit<
    * throws immediately. An aborted `signal` always propagates either way.
    */
   onChunkError?: "skip" | "abort"
+  /**
+   * How to treat a value more than one chunk reported in an array field.
+   *
+   * - `"overlap"` (default): count it once when the two chunks' windows
+   *   overlap, since overlapping windows read the same text. A repeat inside
+   *   one chunk is kept.
+   * - `"none"`: keep every repeat. Use when the document may legitimately
+   *   contain the same item twice (two identical invoice lines, say).
+   */
+  dedupe?: DedupeMode
 }
 
 /** Rebuild the `create()` options for one chunk. */
@@ -124,10 +135,11 @@ function isAbort(error: unknown): boolean {
  * the per-chunk results are merged and validated against `schema`.
  *
  * Merging is deterministic and does not call the model: array fields are
- * concatenated and deduplicated by deep equality, other fields take the first
- * non-null value in chunk order. It cannot reconcile a value reworded across
- * two chunks, and a record longer than `overlap` that straddles a boundary can
- * still be lost.
+ * concatenated, and a repeat two chunks reported is dropped only when their
+ * windows overlap (`dedupe: "none"` keeps every repeat); other fields take the
+ * first non-null value in chunk order. It cannot reconcile a value reworded
+ * across two chunks, and a record longer than `overlap` that straddles a
+ * boundary can still be lost.
  */
 export async function createDocument<T extends z.ZodType>(
   client: AnyClient,
@@ -145,7 +157,7 @@ export async function createDocument<T extends z.ZodType>(
   })
 
   const outcomes: ChunkOutcome[] = []
-  const values: unknown[] = []
+  const values: ChunkValue[] = []
   const chunkErrors: DocumentChunkError[] = []
   let usage = emptyUsage()
 
@@ -203,7 +215,11 @@ export async function createDocument<T extends z.ZodType>(
     }
 
     usage = sumUsage(usage, chunkUsage)
-    values.push(value)
+    values.push({
+      value,
+      startIndex: chunk.startIndex,
+      endIndex: chunk.endIndex,
+    })
     outcomes.push({
       index,
       startIndex: chunk.startIndex,
@@ -214,7 +230,9 @@ export async function createDocument<T extends z.ZodType>(
   }
 
   return {
-    data: mergeInto(params.schema, values, chunkErrors),
+    data: mergeInto(params.schema, values, chunkErrors, {
+      dedupe: params.dedupe ?? "overlap",
+    }),
     chunks: outcomes,
     usage,
   }

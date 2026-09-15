@@ -408,16 +408,30 @@ chunks[0]      // { index, startIndex, endIndex, value, usage }
 
 | Root | Rule |
 |---|---|
-| object | Array **fields** are concatenated across chunks and deduplicated by deep structural equality; every other field takes the first non-null value seen, in chunk order. |
-| array | The per-chunk arrays are concatenated and deduplicated the same way. |
+| object | Array **fields** are concatenated across chunks; every other field takes the first non-null value seen, in chunk order. |
+| array | The per-chunk arrays are concatenated the same way. |
 | scalar (`z.string()`, `z.date()`, ...) | The first non-null value wins. |
+
+**Array fields: when is a repeat removed?** A value that more than one chunk reported is dropped only when those chunks' windows **overlap** — overlapping windows read the same text, so they are two views of one item. The default is `dedupe: "overlap"`:
+
+```ts
+await createDocument(client, { ..., dedupe: "none" })   // keep every repeat
+```
+
+| Case | Result |
+|---|---|
+| The same item inside **one** chunk | **Kept.** Windowing cannot have caused it — one window is one reading. |
+| The same item in two chunks whose windows **overlap** | Counted once. This is the artifact `overlap` creates. |
+| The same item in two chunks whose windows **do not** overlap | **Kept.** Two windows that share no text are two sightings. |
+
+`dedupe: "none"` skips all of this and concatenates. Use it when the document may legitimately repeat an item (two identical invoice lines) and you would rather see a duplicate than lose one.
 
 What this means in practice:
 
-- Overlapping windows re-report the same item; deep equality removes the duplicate.
 - A value **reworded** in two chunks (same meaning, different text) is *not* merged — you get both.
 - A conflicting scalar keeps the **first** value and silently discards the later one.
 - A record longer than `overlap` that straddles a boundary can still be lost.
+- **Known limit:** two genuine duplicates that happen to sit in two *overlapping* chunks are still collapsed — overlapping windows leave no signal to tell them apart from an overlap repeat. Use `dedupe: "none"` if that matters.
 
 **Deep equality** compares type and content, so `z.date()`, `Map`, `Set` and `RegExp` values are compared as values: two `Date`s are equal only if they hold the same instant, and `NaN` is distinct from `null`. A value with no structural form — a class instance, a function — is opaque and equal only to itself, so an unrecognised duplicate survives rather than a distinct value disappearing.
 

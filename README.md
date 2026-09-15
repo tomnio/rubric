@@ -40,6 +40,7 @@ const user = await client.create({
 | **Citations** | `cited(User)` + `context` verifies model quotes against the source; fakes reask |
 | **LLM judge** | `llmRefine("rule", client)` validates a field with a second model call |
 | **Hooks** | `onRequest` / `onParseError` / `onSuccess` / `onUsage` (token totals across reasks) |
+| **Token budget** | `tokenBudget` caps cumulative tokens; the loop stops instead of reasking |
 | **Stream** | `createPartial()` incomplete objects (closed subtrees validated); `createIterable()` complete list items |
 | **Images** | `imageUrl(url)` in `messages[].content` (Anthropic maps these to `image` / `source`) |
 
@@ -176,6 +177,7 @@ const user = await client.create({
   messages: [{ role: "user", content: "John is 25 years old" }],
   maxRetries: 3,       // optional, overrides wrap()
   mode: "TOOLS",       // optional
+  tokenBudget: 20_000, // optional, cumulative across attempts
   temperature: 0,
   max_tokens: 1024,
   top_p: 1,
@@ -184,6 +186,14 @@ const user = await client.create({
 ```
 
 `maxRetries: 0` means one attempt. Exhausted retries throw `RetryExhaustedError`. Network / SDK errors are not retried.
+
+`tokenBudget` caps the **cumulative** tokens spent across every attempt. When the
+running total reaches the budget the loop stops instead of reasking and throws
+`TokenBudgetExceeded`. A response that already validated is still returned — the
+budget blocks the next call, not the answer in hand. If a provider response
+omits usage metadata the budget cannot be measured, so the call fails with
+`TokenUsageUnavailableError` rather than retrying blind. Not supported by
+`createPartial()` / `createIterable()` (streaming has no reask to guard).
 
 ### Modes
 

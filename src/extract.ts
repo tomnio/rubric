@@ -1,4 +1,5 @@
 import type { z } from "zod"
+import { assertTokenBudget, budgetError } from "./budget.js"
 import { runWithContext } from "./context.js"
 import {
   JsonParseError,
@@ -9,7 +10,7 @@ import { handlerFor } from "./modes/registry.js"
 import { applyRequestExtras, mergeSamplingExtras } from "./request.js"
 import { coerceParsedValue } from "./schema.js"
 import type { CreateParams, Hooks, LLMClient, Mode, WrapOptions } from "./types.js"
-import { addUsage, emptyUsage } from "./usage.js"
+import { addUsage, emptyUsage, hasUsage } from "./usage.js"
 
 const DEFAULT_MAX_RETRIES = 3
 const DEFAULT_MODE: Mode = "TOOLS"
@@ -21,6 +22,9 @@ export async function extract<T extends z.ZodType>(
 ): Promise<z.infer<T>> {
   const mode = params.mode ?? defaults?.mode ?? DEFAULT_MODE
   const maxRetries = params.maxRetries ?? defaults?.maxRetries ?? DEFAULT_MAX_RETRIES
+  const tokenBudget = assertTokenBudget(
+    params.tokenBudget ?? defaults?.tokenBudget,
+  )
   const hooks: Hooks = { ...defaults?.hooks, ...params.hooks }
   const attemptsAllowed = maxRetries + 1
   const handler = handlerFor(mode)
@@ -34,6 +38,9 @@ export async function extract<T extends z.ZodType>(
   let lastError: JsonParseError | SchemaValidationError | undefined
   let attempts = 0
   let usage = emptyUsage()
+  // Stays true only while every attempt reported usage. The budget is
+  // unenforceable the moment one response omits it.
+  let usageAvailable = true
 
   while (attempts < attemptsAllowed) {
     attempts += 1
@@ -44,6 +51,7 @@ export async function extract<T extends z.ZodType>(
       params.signal ? { signal: params.signal } : undefined,
     )
     usage = addUsage(usage, raw)
+    usageAvailable = usageAvailable && hasUsage(raw)
 
     try {
       const json = coerceParsedValue(params.schema, handler.parseResponse(raw))
@@ -73,6 +81,19 @@ export async function extract<T extends z.ZodType>(
       hooks.onParseError?.(err)
       if (attempts >= attemptsAllowed) {
         break
+      }
+      // Checked only on the failure path: a valid response that pushed the
+      // total past the budget was already returned above. This stops the next
+      // call, not the answer in hand.
+      const overBudget = budgetError(
+        tokenBudget,
+        usageAvailable,
+        usage,
+        attempts,
+      )
+      if (overBudget !== undefined) {
+        hooks.onUsage?.(usage)
+        throw overBudget
       }
       kwargs = handler.handleReask(kwargs, raw, err)
     }

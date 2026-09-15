@@ -1,4 +1,5 @@
 import type { z } from "zod"
+import { rejectTokenBudgetForStream } from "./budget.js"
 import { JsonCompleteness } from "./completeness.js"
 import { JsonParseError } from "./errors.js"
 import { handlerFor } from "./modes/registry.js"
@@ -31,6 +32,13 @@ export async function* extractPartial<T extends z.ZodType>(
   defaults?: WrapOptions,
 ): AsyncGenerator<DeepPartial<z.infer<T>>> {
   const mode = params.mode ?? defaults?.mode ?? DEFAULT_MODE
+  // A stream has no reask to guard, and its usage arrives incrementally, so a
+  // budget could not be enforced before the call that spends it. Reject it
+  // rather than accept a setting that does nothing.
+  rejectTokenBudgetForStream(
+    params.tokenBudget ?? defaults?.tokenBudget,
+    "createPartial",
+  )
   if (!client.chatCompletionsStream) {
     throw new Error("LLMClient does not implement chatCompletionsStream")
   }

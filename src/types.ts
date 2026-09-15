@@ -106,6 +106,11 @@ export type WrapOptions = SamplingExtras & {
   mode?: Mode
   /** Extra attempts after the first. Default: 3 */
   maxRetries?: number
+  /**
+   * Default cumulative token budget for create(). When the total across
+   * attempts reaches this number, the loop stops instead of retrying.
+   */
+  tokenBudget?: number
   hooks?: Hooks
 }
 
@@ -117,6 +122,15 @@ export type CreateParams<T extends z.ZodType> = SamplingExtras & {
   mode?: Mode
   hooks?: Hooks
   signal?: AbortSignal
+  /**
+   * Cumulative token budget for this call. When the total across attempts
+   * reaches this number, the loop stops instead of retrying. A response that
+   * already validated is still returned; the budget only blocks the next
+   * attempt. Requires usage metadata from the provider: if a response omits
+   * it, the call fails with TokenUsageUnavailableError rather than retrying
+   * blind. Not supported by createPartial() / createIterable().
+   */
+  tokenBudget?: number
   /**
    * Source text for `cited()` schemas. Quotes must appear in this text.
    * Ignored by schemas that do not use `cited()`.

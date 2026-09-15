@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { rejectTokenBudgetForStream } from "./budget.js"
 import { JsonParseError } from "./errors.js"
 import { handlerFor } from "./modes/registry.js"
 import { applyRequestExtras, mergeSamplingExtras } from "./request.js"
@@ -21,6 +22,10 @@ export async function* extractIterable<T extends z.ZodType>(
   defaults?: WrapOptions,
 ): AsyncGenerator<z.infer<T>> {
   const mode = params.mode ?? defaults?.mode ?? DEFAULT_MODE
+  rejectTokenBudgetForStream(
+    params.tokenBudget ?? defaults?.tokenBudget,
+    "createIterable",
+  )
   if (!client.chatCompletionsStream) {
     throw new Error("LLMClient does not implement chatCompletionsStream")
   }

@@ -66,3 +66,60 @@ export class RetryExhaustedError extends Error {
     Object.setPrototypeOf(this, new.target.prototype)
   }
 }
+
+/**
+ * Base for token budget failures. Carries the usage snapshot at the moment the
+ * guardrail fired, so callers can log what was spent before the abort.
+ */
+export class TokenBudgetError extends Error {
+  readonly budget: number
+  readonly usage: TokenUsage
+  readonly attempts: number
+
+  constructor(
+    message: string,
+    budget: number,
+    usage: TokenUsage,
+    attempts: number,
+  ) {
+    super(message)
+    this.name = "TokenBudgetError"
+    this.budget = budget
+    this.usage = usage
+    this.attempts = attempts
+    Object.setPrototypeOf(this, new.target.prototype)
+  }
+}
+
+/**
+ * Thrown before a retry that would continue at an exhausted token budget.
+ * A response that arrives valid is still returned: the guardrail only stops
+ * the loop from spending more on another attempt.
+ */
+export class TokenBudgetExceeded extends TokenBudgetError {
+  constructor(
+    message: string,
+    budget: number,
+    usage: TokenUsage,
+    attempts: number,
+  ) {
+    super(message, budget, usage, attempts)
+    this.name = "TokenBudgetExceeded"
+  }
+}
+
+/**
+ * Thrown when a budget is set but a provider response omitted usage metadata,
+ * so the budget cannot be enforced. Fail closed instead of retrying blind.
+ */
+export class TokenUsageUnavailableError extends TokenBudgetError {
+  constructor(
+    message: string,
+    budget: number,
+    usage: TokenUsage,
+    attempts: number,
+  ) {
+    super(message, budget, usage, attempts)
+    this.name = "TokenUsageUnavailableError"
+  }
+}

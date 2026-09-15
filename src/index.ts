@@ -59,6 +59,7 @@ export type { GeminiModelsClient } from "./adapters/gemini.js"
 export { compatible } from "./providers.js"
 export type { CompatibleProvider } from "./providers.js"
 export { maybe } from "./maybe.js"
+export { cited } from "./citation.js"
 export {
   anthropicImageBase64,
   anthropicImageUrl,

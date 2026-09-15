@@ -1,4 +1,5 @@
 import type { z } from "zod"
+import { assertMaxRetries } from "../budget.js"
 import { toLLMClient, type AnyClient } from "../client.js"
 import { extract } from "../extract.js"
 import type { CreateParams, Hooks, Message, WrapOptions } from "../types.js"
@@ -149,6 +150,10 @@ export async function createDocument<T extends z.ZodType>(
   const { llm, defaults } = toLLMClient(client, options)
   const chunkSchema = params.chunkSchema ?? params.schema
   const onChunkError = params.onChunkError ?? "skip"
+  // Validate before the loop. A bad maxRetries would otherwise fail every
+  // chunk, and the catch below would wrap a configuration error into a
+  // DocumentChunkError, burying the cause one layer deeper.
+  assertMaxRetries(params.maxRetries ?? defaults?.maxRetries)
 
   const chunks = await chunkDocument(params.document, {
     chunkSize: params.chunkSize ?? DEFAULT_CHUNK_SIZE,

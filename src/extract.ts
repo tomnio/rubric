@@ -1,5 +1,5 @@
 import type { z } from "zod"
-import { assertTokenBudget, budgetError } from "./budget.js"
+import { assertMaxRetries, assertTokenBudget, budgetError } from "./budget.js"
 import { runWithContext } from "./context.js"
 import {
   JsonParseError,
@@ -22,7 +22,9 @@ export async function extract<T extends z.ZodType>(
   defaults?: WrapOptions,
 ): Promise<z.infer<T>> {
   const mode = params.mode ?? defaults?.mode ?? DEFAULT_MODE
-  const maxRetries = params.maxRetries ?? defaults?.maxRetries ?? DEFAULT_MAX_RETRIES
+  const maxRetries =
+    assertMaxRetries(params.maxRetries ?? defaults?.maxRetries) ??
+    DEFAULT_MAX_RETRIES
   const tokenBudget = assertTokenBudget(
     params.tokenBudget ?? defaults?.tokenBudget,
   )
@@ -142,7 +144,7 @@ export async function extract<T extends z.ZodType>(
   throw new RetryExhaustedError(
     `Failed after ${attempts} attempt(s)`,
     attempts,
-    lastError as JsonParseError | SchemaValidationError,
+    lastError,
     usage,
   )
 }

@@ -186,7 +186,7 @@ const user = await client.create({
 })
 ```
 
-`maxRetries: 0` means one attempt. Exhausted retries throw `RetryExhaustedError`. Network / SDK errors are not retried.
+`maxRetries: 0` means one attempt. It must be a non-negative integer — a negative, fractional, `NaN` or infinite value throws `TypeError` / `RangeError` before the first request, rather than silently making zero attempts (or, for a fraction, rounding up to more than you wrote). Exhausted retries throw `RetryExhaustedError`; its `lastError` is `undefined` when no attempt ever ran. Network / SDK errors are not retried.
 
 `tokenBudget` caps the **cumulative** tokens spent across every attempt. When the
 running total reaches the budget the loop stops instead of reasking and throws

@@ -27,6 +27,31 @@ export function assertTokenBudget(
 }
 
 /**
+ * Validate a retry count before the first provider call.
+ *
+ * `maxRetries` is user-supplied and easy to compute wrong (`config.retries - 1`,
+ * a value parsed from env). Left unchecked, a negative or `NaN` value makes the
+ * loop run zero times and throw `RetryExhaustedError` for a call that never
+ * happened, and a fractional value silently rounds up — `0.5` spends two
+ * attempts, more than written. Reject both up front, as `assertTokenBudget`
+ * does, so the mistake names itself instead of looking like a model failure.
+ */
+export function assertMaxRetries(
+  maxRetries: number | undefined,
+): number | undefined {
+  if (maxRetries === undefined) {
+    return undefined
+  }
+  if (!Number.isInteger(maxRetries)) {
+    throw new TypeError("maxRetries must be a non-negative integer")
+  }
+  if (maxRetries < 0) {
+    throw new RangeError("maxRetries must not be negative")
+  }
+  return maxRetries
+}
+
+/**
  * Reject a budget on a streaming call.
  *
  * A stream has no reask to guard, and its usage arrives incrementally, so a

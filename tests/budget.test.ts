@@ -168,12 +168,15 @@ describe("tokenBudget", () => {
       })
       .catch(() => undefined)
 
-    expect(onUsage).toHaveBeenCalledWith({
-      inputTokens: 60,
-      outputTokens: 40,
-      totalTokens: 100,
-      attempts: 1,
-    } satisfies TokenUsage)
+    expect(onUsage).toHaveBeenCalledWith(
+      {
+        inputTokens: 60,
+        outputTokens: 40,
+        totalTokens: 100,
+        attempts: 1,
+      } satisfies TokenUsage,
+      { attemptNumber: 1, maxAttempts: 4, isLastAttempt: true },
+    )
   })
 
   it("has no effect when no budget is set", async () => {

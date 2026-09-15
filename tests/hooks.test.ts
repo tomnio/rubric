@@ -74,7 +74,10 @@ describe("hooks", () => {
     expect(onRequest).toHaveBeenCalledTimes(1)
     expect(onRequest.mock.calls[0]?.[0]).toMatchObject({ model: "test-model" })
     expect(onParseError).not.toHaveBeenCalled()
-    expect(onSuccess).toHaveBeenCalledWith({ name: "John", age: 25 })
+    expect(onSuccess).toHaveBeenCalledWith(
+      { name: "John", age: 25 },
+      { attemptNumber: 1, maxAttempts: 4, isLastAttempt: true },
+    )
   })
 
   it("calls onParseError on validation failure, then onSuccess after reask", async () => {

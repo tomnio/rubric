@@ -6,6 +6,7 @@ import {
   RetryExhaustedError,
   SchemaValidationError,
 } from "./errors.js"
+import { attemptMeta, safeEmit } from "./hooks.js"
 import { handlerFor } from "./modes/registry.js"
 import { applyRequestExtras, mergeSamplingExtras } from "./request.js"
 import { coerceParsedValue } from "./schema.js"
@@ -44,12 +45,30 @@ export async function extract<T extends z.ZodType>(
 
   while (attempts < attemptsAllowed) {
     attempts += 1
-    hooks.onRequest?.(kwargs)
-    params.signal?.throwIfAborted()
-    const raw = await client.chatCompletionsCreate(
-      kwargs,
-      params.signal ? { signal: params.signal } : undefined,
+    const retriesLeft = attempts < attemptsAllowed
+    safeEmit(
+      "onRequest",
+      hooks.onRequest,
+      [kwargs, attemptMeta(attempts, attemptsAllowed, !retriesLeft)],
     )
+    params.signal?.throwIfAborted()
+
+    let raw: unknown
+    try {
+      raw = await client.chatCompletionsCreate(
+        kwargs,
+        params.signal ? { signal: params.signal } : undefined,
+      )
+    } catch (err) {
+      // Provider / SDK failure. Not retried, so this attempt is the last one.
+      safeEmit(
+        "onError",
+        hooks.onError,
+        [err, attemptMeta(attempts, attemptsAllowed, true)],
+      )
+      throw err
+    }
+
     usage = addUsage(usage, raw)
     usageAvailable = usageAvailable && hasUsage(raw)
 
@@ -70,36 +89,56 @@ export async function extract<T extends z.ZodType>(
           parsed.error.issues,
         )
       }
-      hooks.onUsage?.(usage)
-      hooks.onSuccess?.(parsed.data)
+      safeEmit(
+        "onUsage",
+        hooks.onUsage,
+        [usage, attemptMeta(attempts, attemptsAllowed, true)],
+      )
+      safeEmit(
+        "onSuccess",
+        hooks.onSuccess,
+        [parsed.data, attemptMeta(attempts, attemptsAllowed, true)],
+      )
       return parsed.data
     } catch (err) {
       if (!(err instanceof JsonParseError || err instanceof SchemaValidationError)) {
         throw err
       }
       lastError = err
-      hooks.onParseError?.(err)
-      if (attempts >= attemptsAllowed) {
-        break
-      }
       // Checked only on the failure path: a valid response that pushed the
       // total past the budget was already returned above. This stops the next
       // call, not the answer in hand.
-      const overBudget = budgetError(
-        tokenBudget,
-        usageAvailable,
-        usage,
-        attempts,
+      const overBudget = retriesLeft
+        ? budgetError(tokenBudget, usageAvailable, usage, attempts)
+        : undefined
+      // A guardrail that stops the loop makes this the last attempt, even when
+      // attempts remain.
+      const isLast = !retriesLeft || overBudget !== undefined
+      safeEmit(
+        "onParseError",
+        hooks.onParseError,
+        [err, attemptMeta(attempts, attemptsAllowed, isLast)],
       )
       if (overBudget !== undefined) {
-        hooks.onUsage?.(usage)
+        safeEmit(
+          "onUsage",
+          hooks.onUsage,
+          [usage, attemptMeta(attempts, attemptsAllowed, true)],
+        )
         throw overBudget
+      }
+      if (!retriesLeft) {
+        break
       }
       kwargs = handler.handleReask(kwargs, raw, err)
     }
   }
 
-  hooks.onUsage?.(usage)
+  safeEmit(
+    "onUsage",
+    hooks.onUsage,
+    [usage, attemptMeta(attempts, attemptsAllowed, true)],
+  )
   throw new RetryExhaustedError(
     `Failed after ${attempts} attempt(s)`,
     attempts,

@@ -67,12 +67,15 @@ describe("token usage", () => {
       schema: User,
       messages: [{ role: "user", content: "John is 25" }],
     })
-    expect(onUsage).toHaveBeenCalledWith({
-      inputTokens: 10,
-      outputTokens: 5,
-      totalTokens: 15,
-      attempts: 1,
-    } satisfies TokenUsage)
+    expect(onUsage).toHaveBeenCalledWith(
+      {
+        inputTokens: 10,
+        outputTokens: 5,
+        totalTokens: 15,
+        attempts: 1,
+      } satisfies TokenUsage,
+      { attemptNumber: 1, maxAttempts: 4, isLastAttempt: true },
+    )
   })
 
   it("sums usage across a reask", async () => {
@@ -189,12 +192,15 @@ describe("token usage", () => {
       snapshots.push(snap)
     }
     expect(snapshots.at(-1)).toEqual({ name: "John", age: 25 })
-    expect(onUsage).toHaveBeenCalledWith({
-      inputTokens: 12,
-      outputTokens: 8,
-      totalTokens: 20,
-      attempts: 1,
-    })
+    expect(onUsage).toHaveBeenCalledWith(
+      {
+        inputTokens: 12,
+        outputTokens: 8,
+        totalTokens: 20,
+        attempts: 1,
+      },
+      { attemptNumber: 1, maxAttempts: 1, isLastAttempt: true },
+    )
   })
 
   it("merges Anthropic message_start and message_delta usage on iterable", async () => {
@@ -234,11 +240,14 @@ describe("token usage", () => {
       items.push(item)
     }
     expect(items).toHaveLength(2)
-    expect(onUsage).toHaveBeenCalledWith({
-      inputTokens: 15,
-      outputTokens: 9,
-      totalTokens: 24,
-      attempts: 1,
-    })
+    expect(onUsage).toHaveBeenCalledWith(
+      {
+        inputTokens: 15,
+        outputTokens: 9,
+        totalTokens: 24,
+        attempts: 1,
+      },
+      { attemptNumber: 1, maxAttempts: 1, isLastAttempt: true },
+    )
   })
 })

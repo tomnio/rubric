@@ -39,7 +39,7 @@ const user = await client.create({
 | **Maybe** | `maybe(User)` → `{ result, error, message }` instead of throwing on a miss |
 | **Citations** | `cited(User)` + `context` verifies model quotes against the source; fakes reask |
 | **LLM judge** | `llmRefine("rule", client)` validates a field with a second model call |
-| **Hooks** | `onRequest` / `onParseError` / `onSuccess` / `onUsage` (token totals across reasks) |
+| **Hooks** | `onRequest` / `onError` / `onParseError` / `onSuccess` / `onUsage`, each with attempt metadata |
 | **Token budget** | `tokenBudget` caps cumulative tokens; the loop stops instead of reasking |
 | **Stream** | `createPartial()` incomplete objects (closed subtrees validated); `createIterable()` complete list items |
 | **Images** | `imageUrl(url)` in `messages[].content` (Anthropic maps these to `image` / `source`) |
@@ -282,13 +282,37 @@ const Adult = z.object({
 
 wrap(openai, {
   hooks: {
-    onRequest(kwargs) {},
-    onParseError(error) {},
-    onSuccess(value) {},
-    onUsage(usage) {},
+    onRequest(kwargs, meta) {},
+    onError(error, meta) {},      // provider call threw; not retried
+    onParseError(error, meta) {}, // no JSON, or schema validation failed
+    onSuccess(value, meta) {},
+    onUsage(usage, meta) {},      // cumulative totals across reasks
   },
 })
 ```
+
+Every hook gets an `AttemptMeta` as its second argument:
+
+```ts
+type AttemptMeta = {
+  attemptNumber: number   // 1-based
+  maxAttempts: number     // maxRetries + 1
+  isLastAttempt: boolean  // no further attempt will run
+}
+```
+
+`isLastAttempt` is true when the loop is actually over, which includes a
+guardrail stopping it early — not merely `attemptNumber === maxAttempts`. That
+makes "alert on the final failure" a one-liner:
+
+```ts
+onParseError(error, meta) {
+  if (meta.isLastAttempt) alert(error)
+}
+```
+
+A throwing hook is reported via `console.warn` and ignored, so telemetry cannot
+fail a call you already paid for.
 
 `create({ hooks })` overrides the same keys from `wrap({ hooks })`.
 

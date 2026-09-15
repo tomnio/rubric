@@ -87,12 +87,39 @@ export type Message = {
   tool_calls?: ToolCall[]
 }
 
+/** Per-attempt context passed to every hook as its second argument. */
+export type AttemptMeta = {
+  /** 1-based index of the attempt that just ran. */
+  attemptNumber: number
+  /** Total attempts this call may make (`maxRetries + 1`). */
+  maxAttempts: number
+  /**
+   * True when no further attempt will be made: either the attempts are spent,
+   * or a guardrail (token budget) stopped the loop early.
+   */
+  isLastAttempt: boolean
+}
+
+/**
+ * Observability callbacks. A hook never affects the loop: a throwing handler is
+ * reported and ignored (see `safeEmit`), because telemetry must not fail a call
+ * the caller has already paid for.
+ */
 export type Hooks = {
-  onRequest?: (kwargs: RequestKwargs) => void
-  onParseError?: (error: JsonParseError | SchemaValidationError) => void
-  onSuccess?: (value: unknown) => void
+  onRequest?: (kwargs: RequestKwargs, meta: AttemptMeta) => void
+  /**
+   * The provider call itself threw: network, auth, rate limit, SDK bug. These
+   * are not retried, so this always carries `isLastAttempt: true`.
+   */
+  onError?: (error: unknown, meta: AttemptMeta) => void
+  /** Retryable failure: no JSON, or JSON that failed schema validation. */
+  onParseError?: (
+    error: JsonParseError | SchemaValidationError,
+    meta: AttemptMeta,
+  ) => void
+  onSuccess?: (value: unknown, meta: AttemptMeta) => void
   /** Totals across every attempt in this create() call, including reasks. */
-  onUsage?: (usage: TokenUsage) => void
+  onUsage?: (usage: TokenUsage, meta: AttemptMeta) => void
 }
 
 export type SamplingExtras = {

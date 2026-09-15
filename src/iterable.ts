@@ -1,12 +1,13 @@
 import { z } from "zod"
 import { rejectTokenBudgetForStream } from "./budget.js"
 import { runWithContext } from "./context.js"
-import { JsonParseError } from "./errors.js"
+import { JsonParseError, OutputTruncatedError } from "./errors.js"
 import { attemptMeta, safeEmit } from "./hooks.js"
 import { handlerFor } from "./modes/registry.js"
 import { applyRequestExtras, mergeSamplingExtras } from "./request.js"
 import { coerceParsedValue } from "./schema.js"
 import { parseIncomplete } from "./stream-json.js"
+import { truncationReason } from "./truncation.js"
 import type { CreateParams, Hooks, LLMClient, Mode, WrapOptions } from "./types.js"
 import { emptyUsage, finishStreamUsage, mergeChunkUsage } from "./usage.js"
 
@@ -45,6 +46,9 @@ export async function* extractIterable<T extends z.ZodType>(
   let buffer = ""
   let yielded = 0
   let usage = emptyUsage()
+  // See createPartial(): a truncated stream that yielded nothing is a token
+  // limit, not a malformed list.
+  let truncated: string | undefined
 
   params.signal?.throwIfAborted()
   for await (const chunk of client.chatCompletionsStream(
@@ -52,6 +56,7 @@ export async function* extractIterable<T extends z.ZodType>(
     params.signal ? { signal: params.signal } : undefined,
   )) {
     usage = mergeChunkUsage(usage, chunk)
+    truncated = truncationReason(chunk) ?? truncated
     buffer += handler.deltaFromChunk(chunk)
     const json = coerceParsedValue(arraySchema, parseIncomplete(buffer))
     if (!Array.isArray(json)) {
@@ -81,6 +86,12 @@ export async function* extractIterable<T extends z.ZodType>(
     attemptMeta(1, 1, true),
   ])
   if (yielded === 0) {
+    if (truncated !== undefined) {
+      throw new OutputTruncatedError(
+        `Output was cut off by the provider's token limit (${truncated}) before any list item completed. Raise max_tokens, or extract a smaller schema.`,
+        { reason: truncated, raw: buffer, attempts: 1 },
+      )
+    }
     throw new JsonParseError("Stream ended without a complete list item", buffer)
   }
 }

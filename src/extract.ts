@@ -3,6 +3,7 @@ import { assertMaxRetries, assertTokenBudget, budgetError } from "./budget.js"
 import { runWithContext } from "./context.js"
 import {
   JsonParseError,
+  OutputTruncatedError,
   RetryExhaustedError,
   SchemaValidationError,
 } from "./errors.js"
@@ -10,6 +11,7 @@ import { attemptMeta, safeEmit } from "./hooks.js"
 import { handlerFor } from "./modes/registry.js"
 import { applyRequestExtras, mergeSamplingExtras } from "./request.js"
 import { coerceParsedValue } from "./schema.js"
+import { truncationReason } from "./truncation.js"
 import type {
   AttemptMeta,
   ChunkMeta,
@@ -126,6 +128,35 @@ export async function extract<T extends z.ZodType>(
         throw err
       }
       lastError = err
+      // The provider hit its output cap. Reasking would resend the same
+      // max_tokens and be cut in the same place, so the loop stops here and
+      // names the real cause instead of blaming the JSON. Checked after the
+      // parse above, so a response that validated despite the marker is still
+      // returned — the flag means "the model was stopped", not "the answer is
+      // unusable".
+      const truncated = truncationReason(raw)
+      if (truncated !== undefined) {
+        safeEmit(
+          "onParseError",
+          hooks.onParseError,
+          [err, meta(attempts, attemptsAllowed, true)],
+        )
+        safeEmit(
+          "onUsage",
+          hooks.onUsage,
+          [usage, meta(attempts, attemptsAllowed, true)],
+        )
+        throw new OutputTruncatedError(
+          `Output was cut off by the provider's token limit after ${attempts} attempt(s) (${truncated}). Raise max_tokens, or extract a smaller schema.`,
+          {
+            reason: truncated,
+            raw,
+            attempts,
+            usage,
+            cause: err,
+          },
+        )
+      }
       // Checked only on the failure path: a valid response that pushed the
       // total past the budget was already returned above. This stops the next
       // call, not the answer in hand.

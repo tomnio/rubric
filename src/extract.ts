@@ -42,6 +42,15 @@ export async function extract<T extends z.ZodType>(
    * looking at; `create()` leaves it undefined.
    */
   chunk?: ChunkMeta,
+  /**
+   * Internal. `createDocument()` uses this to learn whether every attempt of
+   * this chunk reported usage, which is what lets a document-wide budget fail
+   * closed: without token counts the summed total is not the real spend, and
+   * enforcing a budget against it would be silently ineffective.
+   *
+   * Called exactly once, on every exit path, after the final `onUsage` emission.
+   */
+  observe?: { onUsageAvailable: (available: boolean) => void },
 ): Promise<z.infer<T>> {
   const mode = params.mode ?? defaults?.mode ?? DEFAULT_MODE
   const maxRetries =
@@ -78,135 +87,152 @@ export async function extract<T extends z.ZodType>(
   const meta = (attempt: number, max: number, last: boolean): AttemptMeta =>
     attemptMeta(attempt, max, last, chunk)
 
-  while (attempts < attemptsAllowed) {
-    attempts += 1
-    const retriesLeft = attempts < attemptsAllowed
-    safeEmit(
-      "onRequest",
-      hooks.onRequest,
-      [kwargs, meta(attempts, attemptsAllowed,!retriesLeft)],
-    )
-    signal?.throwIfAborted()
-
-    let raw: unknown
-    try {
-      raw = await client.chatCompletionsCreate(
-        kwargs,
-        signal ? { signal } : undefined,
-      )
-    } catch (err) {
-      // Provider / SDK failure. Not retried, so this attempt is the last one.
+  try {
+    while (attempts < attemptsAllowed) {
+      attempts += 1
+      const retriesLeft = attempts < attemptsAllowed
       safeEmit(
-        "onError",
-        hooks.onError,
-        [err, meta(attempts, attemptsAllowed,true)],
+        "onRequest",
+        hooks.onRequest,
+        [kwargs, meta(attempts, attemptsAllowed, !retriesLeft)],
       )
-      throw err
-    }
+      signal?.throwIfAborted()
 
-    usage = addUsage(usage, raw)
-    usageAvailable = usageAvailable && hasUsage(raw)
-
-    try {
-      const json = coerceParsedValue(params.schema, handler.parseResponse(raw))
-      // Includes .refine() / .superRefine(); those issues go into reask text.
-      // safeParseAsync, not safeParse: llmRefine() refinements are async, and
-      // Zod throws if an async refinement runs during a synchronous parse.
-      // runWithContext carries the citation source and model to validators
-      // without exposing them on the schema (Zod has no validation_context).
-      const parsed = await runWithContext(
-        { citation: params.context, model: params.model },
-        () => params.schema.safeParseAsync(json),
-      )
-      if (!parsed.success) {
-        throw new SchemaValidationError(
-          "Output failed schema validation",
-          parsed.error.issues,
+      let raw: unknown
+      try {
+        raw = await client.chatCompletionsCreate(
+          kwargs,
+          signal ? { signal } : undefined,
         )
-      }
-      safeEmit(
-        "onUsage",
-        hooks.onUsage,
-        [usage, meta(attempts, attemptsAllowed,true)],
-      )
-      safeEmit(
-        "onSuccess",
-        hooks.onSuccess,
-        [parsed.data, meta(attempts, attemptsAllowed,true)],
-      )
-      return parsed.data
-    } catch (err) {
-      if (!(err instanceof JsonParseError || err instanceof SchemaValidationError)) {
-        throw err
-      }
-      lastError = err
-      // The provider hit its output cap. Reasking would resend the same
-      // max_tokens and be cut in the same place, so the loop stops here and
-      // names the real cause instead of blaming the JSON. Checked after the
-      // parse above, so a response that validated despite the marker is still
-      // returned — the flag means "the model was stopped", not "the answer is
-      // unusable".
-      const truncated = truncationReason(raw)
-      if (truncated !== undefined) {
+      } catch (err) {
+        // Provider / SDK failure. Not retried, so this attempt is the last one.
+        // `usageAvailable` is left alone: this attempt reported no usage because
+        // there was no response, not because one omitted its metadata. The
+        // unknown spend is already visible to the caller as a failed chunk, and
+        // flipping the flag here would turn a skippable chunk failure into a
+        // document-wide budget abort.
         safeEmit(
-          "onParseError",
-          hooks.onParseError,
+          "onError",
+          hooks.onError,
           [err, meta(attempts, attemptsAllowed, true)],
         )
+        throw err
+      }
+
+      usage = addUsage(usage, raw)
+      usageAvailable = usageAvailable && hasUsage(raw)
+
+      try {
+        const json = coerceParsedValue(params.schema, handler.parseResponse(raw))
+        // Includes .refine() / .superRefine(); those issues go into reask text.
+        // safeParseAsync, not safeParse: llmRefine() refinements are async, and
+        // Zod throws if an async refinement runs during a synchronous parse.
+        // runWithContext carries the citation source and model to validators
+        // without exposing them on the schema (Zod has no validation_context).
+        const parsed = await runWithContext(
+          { citation: params.context, model: params.model },
+          () => params.schema.safeParseAsync(json),
+        )
+        if (!parsed.success) {
+          throw new SchemaValidationError(
+            "Output failed schema validation",
+            parsed.error.issues,
+          )
+        }
         safeEmit(
           "onUsage",
           hooks.onUsage,
           [usage, meta(attempts, attemptsAllowed, true)],
         )
-        throw new OutputTruncatedError(
-          `Output was cut off by the provider's token limit after ${attempts} attempt(s) (${truncated}). Raise max_tokens, or extract a smaller schema.`,
-          {
-            reason: truncated,
-            raw,
-            attempts,
-            usage,
-            cause: err,
-          },
-        )
-      }
-      // Checked only on the failure path: a valid response that pushed the
-      // total past the budget was already returned above. This stops the next
-      // call, not the answer in hand.
-      const overBudget = retriesLeft
-        ? budgetError(tokenBudget, usageAvailable, usage, attempts)
-        : undefined
-      // A guardrail that stops the loop makes this the last attempt, even when
-      // attempts remain.
-      const isLast = !retriesLeft || overBudget !== undefined
-      safeEmit(
-        "onParseError",
-        hooks.onParseError,
-        [err, meta(attempts, attemptsAllowed,isLast)],
-      )
-      if (overBudget !== undefined) {
         safeEmit(
-          "onUsage",
-          hooks.onUsage,
-          [usage, meta(attempts, attemptsAllowed,true)],
+          "onSuccess",
+          hooks.onSuccess,
+          [parsed.data, meta(attempts, attemptsAllowed, true)],
         )
-        throw overBudget
+        return parsed.data
+      } catch (err) {
+        if (
+          !(err instanceof JsonParseError || err instanceof SchemaValidationError)
+        ) {
+          throw err
+        }
+        lastError = err
+        // The provider hit its output cap. Reasking would resend the same
+        // max_tokens and be cut in the same place, so the loop stops here and
+        // names the real cause instead of blaming the JSON. Checked after the
+        // parse above, so a response that validated despite the marker is still
+        // returned — the flag means "the model was stopped", not "the answer is
+        // unusable".
+        const truncated = truncationReason(raw)
+        if (truncated !== undefined) {
+          safeEmit(
+            "onParseError",
+            hooks.onParseError,
+            [err, meta(attempts, attemptsAllowed, true)],
+          )
+          safeEmit(
+            "onUsage",
+            hooks.onUsage,
+            [usage, meta(attempts, attemptsAllowed, true)],
+          )
+          throw new OutputTruncatedError(
+            `Output was cut off by the provider's token limit after ${attempts} attempt(s) (${truncated}). Raise max_tokens, or extract a smaller schema.`,
+            {
+              reason: truncated,
+              raw,
+              attempts,
+              usage,
+              cause: err,
+            },
+          )
+        }
+        // Checked only on the failure path: a valid response that pushed the
+        // total past the budget was already returned above. This stops the next
+        // call, not the answer in hand.
+        const overBudget = retriesLeft
+          ? budgetError(tokenBudget, usageAvailable, usage, attempts)
+          : undefined
+        // A guardrail that stops the loop makes this the last attempt, even when
+        // attempts remain.
+        const isLast = !retriesLeft || overBudget !== undefined
+        safeEmit(
+          "onParseError",
+          hooks.onParseError,
+          [err, meta(attempts, attemptsAllowed, isLast)],
+        )
+        if (overBudget !== undefined) {
+          safeEmit(
+            "onUsage",
+            hooks.onUsage,
+            [usage, meta(attempts, attemptsAllowed, true)],
+          )
+          throw overBudget
+        }
+        if (!retriesLeft) {
+          break
+        }
+        kwargs = handler.handleReask(kwargs, raw, err)
       }
-      if (!retriesLeft) {
-        break
-      }
-      kwargs = handler.handleReask(kwargs, raw, err)
     }
-  }
 
-  safeEmit(
-    "onUsage",
-    hooks.onUsage,
-    [usage, meta(attempts, attemptsAllowed,true)],
-  )
-  throw new RetryExhaustedError(
-    `Failed after ${attempts} attempt(s)`,
-    attempts,
-    lastError,
-    usage,
-  )
+    safeEmit(
+      "onUsage",
+      hooks.onUsage,
+      [usage, meta(attempts, attemptsAllowed, true)],
+    )
+    throw new RetryExhaustedError(
+      `Failed after ${attempts} attempt(s)`,
+      attempts,
+      lastError,
+      usage,
+    )
+  } finally {
+    // Runs on every exit, so a document-wide budget learns whether this chunk's
+    // total is trustworthy. False means a *response* omitted usage metadata —
+    // the one case where the summed total silently understates the real spend.
+    // A provider error is not that case: it is already surfaced as a failed
+    // chunk, and treating it as unaccountable would let one network blip abort
+    // a budgeted document that would otherwise skip the chunk and carry on.
+    observe?.onUsageAvailable(usageAvailable)
+  }
 }

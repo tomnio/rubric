@@ -40,7 +40,7 @@ const user = await client.create({
 | **Citations** | `cited(User)` + `context` verifies model quotes against the source; fakes reask |
 | **LLM judge** | `llmRefine("rule", client)` validates a field with a second model call |
 | **Hooks** | `onRequest` / `onError` / `onParseError` / `onSuccess` / `onUsage`, each with attempt metadata |
-| **Token budget** | `tokenBudget` caps cumulative tokens; the loop stops instead of reasking |
+| **Token budget** | `tokenBudget` caps cumulative tokens; the loop stops instead of reasking. `createDocument()` adds `chunkTokenBudget` and applies `tokenBudget` to the whole document |
 | **Timeout** | `timeout` caps the whole call's wall-clock time, retries included |
 | **Truncation** | A response cut off by `max_tokens` throws `OutputTruncatedError` instead of reasking |
 | **Stream** | `createPartial()` incomplete objects (closed subtrees validated); `createIterable()` complete list items |
@@ -471,6 +471,7 @@ const { data, chunks, usage } = await createDocument(client, {
   chunkSchema: ChunkInvoice,
   chunkSize: 2000,   // characters, not tokens
   overlap: 100,      // characters bled outward on each side
+  tokenBudget: 50_000, // whole document, every chunk and reask
 })
 
 data.title     // merged, validated against Invoice
@@ -479,7 +480,7 @@ chunks[0]      // { index, startIndex, endIndex, value, usage }
 
 `startIndex` / `endIndex` are absolute offsets into the document you passed in, so you can trace any value back to where it came from.
 
-`createDocument()` takes the same options as `create()` (`maxRetries`, `mode`, `temperature`, `max_tokens`, `top_p`, `signal`, `tokenBudget`, `timeout`, `hooks`) plus:
+`createDocument()` takes the same options as `create()` (`maxRetries`, `mode`, `temperature`, `max_tokens`, `top_p`, `signal`, `tokenBudget`, `timeout`, `hooks`) — with `tokenBudget` and `timeout` widened to the whole document — plus:
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -490,9 +491,12 @@ chunks[0]      // { index, startIndex, endIndex, value, usage }
 | `chunkSchema` | `schema` | Schema used to validate each chunk. Pass a chunk-tolerant one. |
 | `chunker` | Chonkie | Replace the splitter. See **Chunking** below. |
 | `onChunkError` | `"skip"` | `"skip"` records the failure and continues; `"abort"` throws. |
+| `chunkTokenBudget` | — | Cumulative token cap for **each** chunk, on top of `tokenBudget`. |
 | `dedupe` | `"overlap"` | How to treat a repeat two chunks reported. See below. |
 
-`tokenBudget` is **per chunk**, not per document (see [Cost](#documents)). `timeout` is the opposite: one deadline for the **whole document**, started once and shared by every chunk, so `timeout: 30_000` on a 100-chunk document is 30 seconds total rather than 30 seconds each. When it elapses the chunk in flight is aborted and the call throws — like an aborted `signal`, already-extracted chunks are not returned. `maxRetries` is validated up front, before any chunk runs, so a bad value fails once with `TypeError` / `RangeError` instead of being buried in a per-chunk error.
+`tokenBudget` is measured across the **whole document**, not per chunk: it spans every chunk and every reask, so `tokenBudget: 50_000` on a 100-chunk document is 50k tokens total. It is checked *before* each chunk, so it blocks the next chunk rather than discarding one already paid for — a document whose final chunk crosses the budget is still returned, and the error carries the document-wide `usage`. Pass `chunkTokenBudget` as well to also cap each chunk individually; a chunk that reaches it fails and is handled by `onChunkError` like any other chunk failure. `timeout` follows the same shape: one deadline for the **whole document**, started once and shared by every chunk, so `timeout: 30_000` on a 100-chunk document is 30 seconds total rather than 30 seconds each. When it elapses the chunk in flight is aborted and the call throws — like an aborted `signal`, already-extracted chunks are not returned. `maxRetries` is validated up front, before any chunk runs, so a bad value fails once with `TypeError` / `RangeError` instead of being buried in a per-chunk error.
+
+> **Behaviour change.** `tokenBudget` on `createDocument()` used to be applied to **each chunk**; it now covers the whole document. If you were relying on a per-chunk cap, use `chunkTokenBudget`.
 
 **Per-chunk hooks.** Hooks fire during the call, so they cannot wait for `result.chunks[]`. Every hook's `AttemptMeta` therefore carries a `chunk` descriptor for the chunk that fired it:
 
@@ -554,7 +558,7 @@ There is deliberately no LLM "reduce" pass. A second, unvalidated model call wou
 
 **Merged output that fails `schema`** (a required field in no chunk, or two chunks contributing incompatible values) throws `DocumentMergeError`, which carries `issues`, the invalid `partial` object, and any `chunkErrors`. This is a different failure from `DocumentNoDataError`: the chunks *did* produce values, so the problem is their combination.
 
-**Cost.** Each chunk is a separate `create()` call, so a document of N chunks costs N calls — up to `N × (maxRetries + 1)`. `tokenBudget` applies **per chunk**, not per document.
+**Cost.** Each chunk is a separate `create()` call, so a document of N chunks costs N calls — up to `N × (maxRetries + 1)`. `tokenBudget` caps the total across all of them; `chunkTokenBudget` caps any one of them.
 
 Requires Node 20+. The chunker is a WASM module, so it does not run on older Node.
 

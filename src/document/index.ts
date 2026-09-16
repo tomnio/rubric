@@ -1,5 +1,10 @@
 import type { z } from "zod"
-import { assertMaxRetries, assertTimeout } from "../budget.js"
+import {
+  assertMaxRetries,
+  assertTimeout,
+  assertTokenBudget,
+  budgetError,
+} from "../budget.js"
 import { toLLMClient, type AnyClient } from "../client.js"
 import { combineSignal } from "../deadline.js"
 import { extract } from "../extract.js"
@@ -48,7 +53,7 @@ export type DocumentResult<T> = {
 
 export type DocumentParams<T extends z.ZodType> = Omit<
   CreateParams<T>,
-  "messages" | "context"
+  "messages" | "context" | "tokenBudget" | "timeout"
 > & {
   /** The plain-text document to extract from. */
   document: string
@@ -97,6 +102,30 @@ export type DocumentParams<T extends z.ZodType> = Omit<
    */
   dedupe?: DedupeMode
   /**
+   * Cumulative token budget for the **whole document**.
+   *
+   * Unlike `create()`, where `tokenBudget` covers one call, a document becomes
+   * many chunks, so the budget spans all of them: it is measured across every
+   * chunk and every reask, and `tokenBudget: 50_000` on a 100-chunk document
+   * means 50k tokens total, not 50k per chunk. Once the running total reaches
+   * it, no further chunk is started and the call throws `TokenBudgetExceeded`
+   * (or `TokenUsageUnavailableError` when a response omitted usage metadata) —
+   * like an aborted `signal`, already-extracted chunks are not returned. The
+   * error's `usage` is the document-wide total.
+   *
+   * Set `chunkTokenBudget` as well to also cap each chunk individually.
+   */
+  tokenBudget?: number
+  /**
+   * Cumulative token budget for **each chunk**, on top of `tokenBudget`.
+   *
+   * The per-chunk guardrail `create()` has always offered: a chunk that reaches
+   * this total stops reasking and fails, which `onChunkError` then treats like
+   * any other chunk failure. Useful when one runaway chunk must not consume the
+   * whole document's budget.
+   */
+  chunkTokenBudget?: number
+  /**
    * Wall-clock budget for the **whole document**, in milliseconds.
    *
    * Unlike `create()`, where one call is one request, a document becomes many
@@ -109,12 +138,16 @@ export type DocumentParams<T extends z.ZodType> = Omit<
   timeout?: number
 }
 
-/** Rebuild the `create()` options for one chunk. */
+/**
+ * Rebuild the `create()` options for one chunk.
+ *
+ * `params.tokenBudget` is the document-wide budget and is deliberately **not**
+ * forwarded: the chunk's own guardrail is `params.chunkTokenBudget`. The two
+ * are different scopes of the same mechanism, so passing the document total to
+ * a chunk would let one chunk spend the whole document's allowance.
+ */
 function chunkParams(
-  params: { instruction: string } & Omit<
-    CreateParams<z.ZodType>,
-    "messages" | "context" | "timeout"
-  >,
+  params: DocumentParams<z.ZodType>,
   schema: z.ZodType,
   chunkText: string,
   hooks: Hooks,
@@ -142,7 +175,9 @@ function chunkParams(
   if (params.maxRetries !== undefined) next.maxRetries = params.maxRetries
   if (params.mode !== undefined) next.mode = params.mode
   if (signal !== undefined) next.signal = signal
-  if (params.tokenBudget !== undefined) next.tokenBudget = params.tokenBudget
+  if (params.chunkTokenBudget !== undefined) {
+    next.tokenBudget = params.chunkTokenBudget
+  }
   if (params.temperature !== undefined) next.temperature = params.temperature
   if (params.max_tokens !== undefined) next.max_tokens = params.max_tokens
   if (params.top_p !== undefined) next.top_p = params.top_p
@@ -182,6 +217,12 @@ export async function createDocument<T extends z.ZodType>(
   // chunk, and the catch below would wrap a configuration error into a
   // DocumentChunkError, burying the cause one layer deeper.
   assertMaxRetries(params.maxRetries ?? defaults?.maxRetries)
+  // The document-wide budget. `create()` measures one call; here the same
+  // number measures the whole document, which is why the per-chunk guardrail
+  // moved to `chunkTokenBudget`. Validated up front for the same reason as
+  // maxRetries: a bad value should fail once, not once per chunk.
+  const tokenBudget = assertTokenBudget(params.tokenBudget ?? defaults?.tokenBudget)
+  assertTokenBudget(params.chunkTokenBudget)
   // One deadline for the whole document, started here and shared by every
   // chunk. `create()` would start its own timer per chunk, which would make
   // the budget per-chunk.
@@ -189,15 +230,18 @@ export async function createDocument<T extends z.ZodType>(
     params.signal,
     assertTimeout(params.timeout ?? defaults?.timeout),
   )
-  // Hand extract() a `defaults` with `timeout` removed. The deadline is already
-  // on `signal`, so this does not change behaviour — the shared deadline starts
-  // earlier and always fires first. It avoids building a redundant second timer
-  // per chunk, which would be N pointless timers on a long document.
+  // Hand extract() a `defaults` with `timeout` and `tokenBudget` removed. Both
+  // are enforced here at document scope — the deadline already rides on
+  // `signal`, and the budget is checked between chunks — so leaving them in
+  // would make extract() apply each of them *again*, per chunk. For `timeout`
+  // that is merely a redundant timer (the shared deadline starts earlier and
+  // always fires first); for `tokenBudget` it would be a real behaviour change,
+  // silently reinstating the per-chunk cap this API just replaced.
   const chunkDefaults: WrapOptions | undefined =
-    defaults?.timeout === undefined
+    defaults === undefined || (defaults.timeout === undefined && defaults.tokenBudget === undefined)
       ? defaults
       : (() => {
-          const { timeout: _dropped, ...rest } = defaults
+          const { timeout: _t, tokenBudget: _b, ...rest } = defaults
           return rest
         })()
 
@@ -211,14 +255,40 @@ export async function createDocument<T extends z.ZodType>(
   const values: ChunkValue[] = []
   const chunkErrors: DocumentChunkError[] = []
   let usage = emptyUsage()
+  // Stays true only while every chunk's every attempt reported usage. A
+  // document-wide budget can only be measured against a complete total, so one
+  // silent chunk makes it unenforceable — the same fail-closed rule create()
+  // applies within a call, lifted to the document.
+  let usageAvailable = true
 
   for (const [index, chunk] of chunks.entries()) {
     signal?.throwIfAborted()
+
+    // The document budget, checked before each chunk rather than after, so it
+    // blocks the *next* chunk instead of discarding one already paid for. This
+    // is create()'s rule at document scale: the guardrail stops the loop, it
+    // does not invalidate work already done. A document whose final chunk
+    // crosses the budget is therefore still returned.
+    if (index > 0 && tokenBudget !== undefined) {
+      const overBudget = budgetError(
+        tokenBudget,
+        usageAvailable,
+        usage,
+        usage.attempts,
+        "Document token budget",
+      )
+      if (overBudget !== undefined) {
+        throw overBudget
+      }
+    }
 
     // extract() merges wrap-level hooks with per-call hooks; do the same here
     // so the capture sees the same handlers the caller will.
     const userHooks: Hooks = { ...defaults?.hooks, ...params.hooks }
     let chunkUsage = emptyUsage()
+    // Whether this chunk's attempts all reported usage. extract() reports it
+    // through the observe callback below, on success and failure alike.
+    let chunkUsageAvailable = true
     const hooks: Hooks = {
       ...userHooks,
       onUsage: (snapshot, meta) => {
@@ -242,8 +312,10 @@ export async function createDocument<T extends z.ZodType>(
           endIndex: chunk.endIndex,
           total: chunks.length,
         },
+        { onUsageAvailable: (available) => (chunkUsageAvailable = available) },
       )
     } catch (error) {
+      usageAvailable = usageAvailable && chunkUsageAvailable
       // An aborted signal or an elapsed deadline stops the whole document:
       // the caller asked for the run to end, so a failed chunk is not a
       // per-chunk problem to record and move past.
@@ -276,6 +348,7 @@ export async function createDocument<T extends z.ZodType>(
       continue
     }
 
+    usageAvailable = usageAvailable && chunkUsageAvailable
     usage = sumUsage(usage, chunkUsage)
     values.push({
       value,

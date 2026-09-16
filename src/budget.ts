@@ -135,13 +135,19 @@ export function budgetError(
   usageAvailable: boolean,
   usage: TokenUsage,
   attempts: number,
+  /**
+   * What the budget covers, used only in the message. `createDocument()` passes
+   * "Document token budget" so a failure is not read as one chunk's problem;
+   * the numbers in the error already refer to the right scope either way.
+   */
+  label = "Token budget",
 ): TokenBudgetError | undefined {
   if (tokenBudget === undefined) {
     return undefined
   }
   if (!usageAvailable) {
     return new TokenUsageUnavailableError(
-      "Token budget cannot be enforced because a provider response did not include usage metadata",
+      `${label} cannot be enforced because a provider response did not include usage metadata`,
       tokenBudget,
       usage,
       attempts,
@@ -149,7 +155,7 @@ export function budgetError(
   }
   if (usage.totalTokens >= tokenBudget) {
     return new TokenBudgetExceeded(
-      `Token budget exhausted after ${usage.totalTokens} tokens across ${attempts} attempt(s) (budget: ${tokenBudget})`,
+      `${label} exhausted after ${usage.totalTokens} tokens across ${attempts} attempt(s) (budget: ${tokenBudget})`,
       tokenBudget,
       usage,
       attempts,

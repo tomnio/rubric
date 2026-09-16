@@ -27,6 +27,8 @@ jobs:
       - name: Install zod ${{ matrix.zod-version }}
         if: matrix.zod-version == '3'
         run: pnpm add -D zod@^3.25.0
+      # Build before test: package-entries.test.ts loads dist/ through
+      # require(esm) and cannot run against a missing build.
+      - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm build

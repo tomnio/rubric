@@ -147,9 +147,9 @@ describe("createPartial", () => {
       tags: z.array(z.string()),
     })
     // `user` has closed (a later sibling follows) but has no `age`. It is
-    // therefore definitively incomplete, not merely still arriving. The old
-    // deepPartialZod path made every field optional and would have shown
-    // { user: { name: "Alice" } } as if it were valid.
+    // therefore definitively incomplete, not merely still arriving. A
+    // permissive partial schema would have shown { user: { name: "Alice" } }
+    // as if it were valid.
     const client = wrap(
       streamClient([
         contentDelta('{"user": {"name": "Alice"}, "tags": ['),

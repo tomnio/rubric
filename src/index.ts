@@ -41,7 +41,6 @@ export {
 export {
   assertOpenAiStrictSchema,
   coerceParsedValue,
-  deepPartialZod,
   jsonSchemaFromZod,
   llmJsonSchemaFromZod,
 } from "./schema.js"

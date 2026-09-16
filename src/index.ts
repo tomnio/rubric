@@ -30,6 +30,7 @@ export type {
 export {
   formatError,
   JsonParseError,
+  OutputTruncatedError,
   RetryExhaustedError,
   SchemaValidationError,
   TokenBudgetError,

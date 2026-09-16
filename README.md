@@ -41,6 +41,7 @@ const user = await client.create({
 | **LLM judge** | `llmRefine("rule", client)` validates a field with a second model call |
 | **Hooks** | `onRequest` / `onError` / `onParseError` / `onSuccess` / `onUsage`, each with attempt metadata |
 | **Token budget** | `tokenBudget` caps cumulative tokens; the loop stops instead of reasking |
+| **Truncation** | A response cut off by `max_tokens` throws `OutputTruncatedError` instead of reasking |
 | **Stream** | `createPartial()` incomplete objects (closed subtrees validated); `createIterable()` complete list items |
 | **Images** | `imageUrl(url)` in `messages[].content` (Anthropic maps these to `image` / `source`) |
 | **Documents** | `createDocument()` splits a long text, extracts per chunk, and merges — `@tomnio/rubric/document` |
@@ -202,6 +203,44 @@ budget blocks the next call, not the answer in hand. If a provider response
 omits usage metadata the budget cannot be measured, so the call fails with
 `TokenUsageUnavailableError` rather than retrying blind. Not supported by
 `createPartial()` / `createIterable()` (streaming has no reask to guard).
+
+#### Truncated output
+
+When the provider stops at its output token limit, the answer is cut off, not
+wrong. Rubric reads that marker from every supported wire format — OpenAI
+`choices[0].finish_reason === "length"`, Anthropic `stop_reason === "max_tokens"`,
+Gemini `candidates[0].finishReason === "MAX_TOKENS"` — and throws
+`OutputTruncatedError` **without retrying**:
+
+```ts
+import { OutputTruncatedError } from "@tomnio/rubric"
+
+try {
+  const user = await client.create({ model, schema: User, messages, max_tokens: 64 })
+} catch (error) {
+  if (error instanceof OutputTruncatedError) {
+    // error.reason  — the marker the provider used, e.g. "length"
+    // error.raw     — the cut-off response, if you want to salvage it
+    // error.usage   — tokens already spent
+    // error.cause   — the JsonParseError the truncation caused
+    // Retrying cannot help: the same max_tokens is cut in the same place.
+    // Raise max_tokens, or ask for a smaller schema.
+  }
+}
+```
+
+Before this, a truncated response reached the reask loop as a JSON error and the
+model was told to "return valid JSON" — advice it cannot act on, since the JSON
+was never finished. `OutputTruncatedError` is deliberately **not** a
+`RetryExhaustedError`: it fires on the first attempt, so `maxRetries` costs
+nothing. A response that carries the marker but still validated is returned
+normally; the marker means the model was stopped, not that the answer is
+unusable.
+
+For the streaming entry points a truncated stream is normal — partial output is
+what they are for — so nothing is thrown when at least one snapshot or list item
+arrived. Only a stream that ended with nothing to show throws
+`OutputTruncatedError` instead of `JsonParseError`.
 
 ### Modes
 

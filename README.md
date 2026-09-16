@@ -46,7 +46,7 @@ const user = await client.create({
 | **Stream** | `createPartial()` incomplete objects (closed subtrees validated); `createIterable()` complete list items |
 | **Images** | `imageUrl(url)` in `messages[].content` (Anthropic maps these to `image` / `source`) |
 | **Documents** | `createDocument()` splits a long text, extracts per chunk, and merges — `@tomnio/rubric/document` |
-| **Conflicts** | `onConflict: "error"` fails on a field two chunks reported differently, instead of silently keeping the first |
+| **Conflicts** | `onConflict: "error"` fails on a field two chunks reported differently; `dedupeBy: "sku"` merges a reworded array item instead of doubling it |
 
 Not included: a `from_provider("vendor/model")` router, CLI, batch jobs, or cache.
 
@@ -494,6 +494,7 @@ chunks[0]      // { index, startIndex, endIndex, value, usage }
 | `onChunkError` | `"skip"` | `"skip"` records the failure and continues; `"abort"` throws. |
 | `chunkTokenBudget` | — | Cumulative token cap for **each** chunk, on top of `tokenBudget`. |
 | `dedupe` | `"overlap"` | How to treat a repeat two chunks reported. See below. |
+| `dedupeBy` | — | Field(s) that identify the same array item across chunks, so a reworded entity merges instead of doubling. See below. |
 | `onConflict` | `"first"` | How to treat two chunks that reported different values for one field. See below. |
 
 `tokenBudget` is measured across the **whole document**, not per chunk: it spans every chunk and every reask, so `tokenBudget: 50_000` on a 100-chunk document is 50k tokens total. It is checked *before* each chunk, so it blocks the next chunk rather than discarding one already paid for — a document whose final chunk crosses the budget is still returned, and the error carries the document-wide `usage`. Pass `chunkTokenBudget` as well to also cap each chunk individually; a chunk that reaches it fails and is handled by `onChunkError` like any other chunk failure. `timeout` follows the same shape: one deadline for the **whole document**, started once and shared by every chunk, so `timeout: 30_000` on a 100-chunk document is 30 seconds total rather than 30 seconds each. When it elapses the chunk in flight is aborted and the call throws — like an aborted `signal`, already-extracted chunks are not returned. `maxRetries` is validated up front, before any chunk runs, so a bad value fails once with `TypeError` / `RangeError` instead of being buried in a per-chunk error.
@@ -559,9 +560,18 @@ await createDocument(client, { ..., dedupe: "none" })   // keep every repeat
 
 `dedupe: "none"` skips all of this and concatenates. Use it when the document may legitimately repeat an item (two identical invoice lines) and you would rather see a duplicate than lose one.
 
+**Entity keys: merging a reworded item.** The rules above compare whole values, so an entity the model **reworded** across a boundary — `{ sku: "A1", desc: "Coffee" }` in one chunk, `{ sku: "A1", price: 5 }` in the next — is deep-unequal and survives twice, each copy holding half the fields. Name the field that identifies the entity to have the merge recognise the two readings as one item and **union their fields**:
+
+```ts
+await createDocument(client, { ..., dedupeBy: "sku" })          // or ["region", "sku"]
+// → items: [{ sku: "A1", desc: "Coffee", price: 5 }]
+```
+
+Each field the first reading is missing is filled from the later one; a field both saw keeps the **first** non-null value, the same rule a scalar field follows. `dedupe` still applies — two readings merge only when their windows overlap. An item missing any named field, or holding it as `null`, is not identifiable and falls back to whole-value equality: it stays a separate item rather than being folded into one it may not match. The option is off by default, so it is purely additive.
+
 What this means in practice:
 
-- A value **reworded** in two chunks (same meaning, different text) is *not* merged — you get both.
+- A value **reworded** in two chunks (same meaning, different text) is *not* merged — you get both, unless you name an entity key with `dedupeBy`.
 - A conflicting scalar keeps the **first** value and silently discards the later one (unless you pass `onConflict: "error"`).
 - A record longer than `overlap` that straddles a boundary can still be lost.
 - **Known limit:** two genuine duplicates that happen to sit in two *overlapping* chunks are still collapsed — overlapping windows leave no signal to tell them apart from an overlap repeat. Use `dedupe: "none"` if that matters.

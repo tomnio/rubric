@@ -1,5 +1,6 @@
 import type { ZodIssue } from "zod"
 import type { TokenUsage } from "../usage.js"
+import type { ChunkOutcome } from "./index.js"
 
 /**
  * One chunk failed and was recorded instead of aborting the document.
@@ -156,6 +157,70 @@ export class DocumentNoDataError extends Error {
     this.reason = details.reason
     this.chunkErrors = details.chunkErrors
     this.usage = details.usage
+    Object.setPrototypeOf(this, new.target.prototype)
+  }
+}
+
+/**
+ * Why the document stopped before every chunk had run. The original error is
+ * on `cause`: a `TimeoutError` (deadline), an `AbortError` (caller signal),
+ * a `TokenBudgetExceeded`, or a `TokenUsageUnavailableError`.
+ */
+export type InterruptReason =
+  | "timeout"
+  | "aborted"
+  | "token-budget"
+  | "usage-unavailable"
+
+/**
+ * The document was cut short mid-run by a timeout, an abort, or the document
+ * budget — and everything extracted before the cut is carried on the error
+ * instead of being dropped.
+ *
+ * The caller paid for every completed chunk, so the error carries what that
+ * money bought:
+ *
+ * - `partial` — the completed chunks merged as far as they go. This is a
+ *   best-effort value, **not** validated against the schema (an interrupted
+ *   document usually cannot satisfy it) and possibly incomplete: fields no
+ *   finished chunk saw are simply absent. Treat it as provisional data, never
+ *   as the final result.
+ * - `chunks` — per-chunk provenance up to the interruption, in document order,
+ *   including chunks that failed and were skipped.
+ * - `usage` — the document-wide spend at the moment of the cut.
+ *
+ * The original interrupting error stays on `cause`, so code that checked for
+ * `TokenBudgetExceeded` or `TimeoutError` before keeps working one level down.
+ * Distinct from `DocumentChunkError`, which is one chunk failing while the
+ * document carries on.
+ */
+export class DocumentInterruptedError extends Error {
+  /** What stopped the run. */
+  readonly reason: InterruptReason
+  /** Completed chunks merged best-effort; `undefined` when no chunk finished. */
+  readonly partial: unknown
+  /** Provenance for everything that ran before the cut, in document order. */
+  readonly chunks: ChunkOutcome[]
+  /** Document-wide token spend when the run was cut. */
+  readonly usage: TokenUsage
+
+  constructor(
+    message: string,
+    details: {
+      reason: InterruptReason
+      partial: unknown
+      chunks: ChunkOutcome[]
+      usage: TokenUsage
+      cause: unknown
+    },
+  ) {
+    super(message)
+    this.name = "DocumentInterruptedError"
+    this.reason = details.reason
+    this.partial = details.partial
+    this.chunks = details.chunks
+    this.usage = details.usage
+    this.cause = details.cause
     Object.setPrototypeOf(this, new.target.prototype)
   }
 }

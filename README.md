@@ -1,8 +1,13 @@
 # Rubric
 
+[![npm](https://img.shields.io/npm/v/@tomnio/rubric)](https://www.npmjs.com/package/@tomnio/rubric)
+[![CI](https://github.com/tomnio/rubric/actions/workflows/ci.yml/badge.svg)](https://github.com/tomnio/rubric/actions/workflows/ci.yml)
+![Node](https://img.shields.io/badge/node-20%2B-brightgreen)
+![zod](https://img.shields.io/badge/zod-3%20%7C%204-blue)
+
 Schema-first structured extraction from LLMs.
 
-You define a Zod schema. Rubric puts that schema on the request, pulls JSON out of the reply, validates it, and **reasks** with the error until the value conforms — or retries run out.
+You define a Zod schema. Rubric puts that schema on the request, pulls JSON out of the reply, validates it, and **reasks** with the error until the value conforms — or retries run out. For documents longer than the context window, `createDocument()` splits the text, extracts per chunk, and merges — measured to recover **100% of planted entities at a 0% duplicate rate** where a single call over the same document returns nothing ([benchmarks](docs/benchmarks.md)).
 
 ```ts
 import OpenAI from "openai"
@@ -26,6 +31,29 @@ const user = await client.create({
 
 `wrap()` does not patch the SDK. The original client is unchanged.
 
+## Why
+
+Getting structured data out of an LLM has three failure layers, and most tooling stops at the first:
+
+1. **One call can't be trusted.** Models miss schema fields, drift on formats, invent values. Rubric closes this loop: schema on the request, validation on the reply, reask with the error — so `create()` returns `z.infer<typeof schema>` or a typed error, never a guess.
+2. **Real documents don't fit in the prompt.** Contracts, filings, and reports run past the context window. A single call truncates silently or dies on the output limit. `createDocument()` chunks the text, extracts per chunk, and merges — with the machinery that makes chunking lossless: overlap-aware dedupe, entity-key merging (`dedupeBy`) for items that cross chunk boundaries, conflict detection (`onConflict`) for fields the document states differently in different places, and partial results on interruption so paid-for chunks come back even when the run is cut short.
+3. **You have to trust the pipeline itself.** A chunk-and-merge layer is easy to doubt: does it drop data? double it? Silently pick one side of a contradiction? Rubric answers with measurement — a seeded generator plants exactly-known entities (including adversarial pairs split across chunk boundaries and a planted scalar conflict), and the scored runs show 100% recall and 0% duplicates at 56 and 151 pages, where the naive call collapses to 0% past the limit. See [docs/benchmarks.md](docs/benchmarks.md).
+
+## Guarantees
+
+Each of these is implemented, typed, and covered by tests:
+
+| Guarantee | How |
+|---|---|
+| **Validated output or a typed error** — never an unvalidated guess | `create()` returns `z.infer<S>` or throws a typed error; failures reask with the parse error attached |
+| **Truncation is surfaced, not papered over** | A response cut by `max_tokens` throws `OutputTruncatedError` instead of reasking into a dead end |
+| **Long-document extraction loses nothing** | 100% recall / 0% duplicates at 56 and 151 pages ([benchmarks](docs/benchmarks.md)) |
+| **Items reworded across chunk boundaries merge back into one** | `dedupeBy` entity-key merge with field union |
+| **A field stated differently in two places is detected** | `onConflict: "error"` names the field, both values, and the windows they came from |
+| **Interrupted runs return what you paid for** | Timeout / abort / budget cuts throw `DocumentInterruptedError` carrying `partial`, per-chunk provenance, and usage |
+| **Every value traces to its source** | `cited()` verifies quotes against the context; document results carry per-chunk absolute offsets |
+| **Spend is bounded** | `tokenBudget` (per call / whole document) stops the loop and returns what completed |
+
 ## Features
 
 | | |
@@ -48,7 +76,7 @@ const user = await client.create({
 | **Documents** | `createDocument()` splits a long text, extracts per chunk, and merges — `@tomnio/rubric/document` |
 | **Conflicts** | `onConflict: "error"` fails on a field two chunks reported differently; `dedupeBy: "sku"` merges a reworded array item instead of doubling it |
 
-Not included: CLI, batch jobs, or cache.
+Not included: CLI, batch jobs, or cache. Measured guarantees and the evidence behind them: [docs/benchmarks.md](docs/benchmarks.md).
 
 ## Quick start
 
@@ -493,6 +521,8 @@ chunks[0]      // { index, startIndex, endIndex, value, usage }
 
 #### Long documents: naive vs chunked
 
+Full method, both runs, and threats to validity: [docs/benchmarks.md](docs/benchmarks.md).
+
 [`examples/extract-long-document.ts`](examples/extract-long-document.ts) (`pnpm example:extract-long-document`) generates a ~55-page simulated report with **known planted entities**, then extracts it two ways — one `create()` call over the whole text, and `createDocument()` with chunking, `dedupeBy`, and `onConflict` — and scores both: recall of the planted entities, duplicate rate from overlapping chunks, tokens, and wall time. Some planted transactions are deliberately reworded across chunk boundaries so only an entity-key merge can reunite them, and the report header states `totalRevenue` twice with different values so `onConflict` has something to guard.
 
 ```bash
@@ -637,9 +667,13 @@ There is deliberately no LLM "reduce" pass. A second, unvalidated model call wou
 
 Requires Node 20+. The chunker is a WASM module, so it does not run on older Node.
 
-## Live tests
+## Testing and reliability
 
-The test suite runs entirely against fake clients — no network, and it passes with no API key. A separate, opt-in suite makes real SDK round trips to prove the adapters, the reask loop, the citation guardrail and the document pipeline work end to end:
+The offline suite runs entirely against fake clients — 399 tests across 44 files, no network, no API key. It covers the retry loop, every mode handler, all document error paths, the merge machinery (including entity-key merging and conflict detection against hand-built outputs), generator determinism, and the package entry-point contract.
+
+CI runs the full suite on a two-version zod matrix (3 and 4) on every push and pull request; releases are tagged, signed, and published by workflow. Everything shipped is on npm as `@tomnio/rubric` ([releases](https://github.com/tomnio/rubric/releases)).
+
+A separate, opt-in suite makes real SDK round trips to prove the adapters, the reask loop, the citation guardrail and the document pipeline work end to end:
 
 ```bash
 pnpm test:live

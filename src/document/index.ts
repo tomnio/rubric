@@ -16,6 +16,7 @@ import {
   mergeInto,
   type ChunkValue,
   type ConflictMode,
+  type DedupeBy,
   type DedupeMode,
 } from "./merge.js"
 
@@ -32,6 +33,7 @@ export { mergeChunks, mergeInto } from "./merge.js"
 export type {
   ChunkValue,
   ConflictMode,
+  DedupeBy,
   DedupeMode,
   MergeOptions,
 } from "./merge.js"
@@ -113,6 +115,24 @@ export type DocumentParams<T extends z.ZodType> = Omit<
    *   contain the same item twice (two identical invoice lines, say).
    */
   dedupe?: DedupeMode
+  /**
+   * Field(s) that identify the same array item across chunks, so two readings
+   * of one entity are recognised as one item.
+   *
+   * By default an array item is deduped by its whole value, so an entity the
+   * model **reworded** across a boundary — `{ sku: "A1", desc: "Coffee" }` in
+   * one chunk, `{ sku: "A1", price: 5 }` in the next — is deep-unequal and
+   * survives twice, each copy holding half the fields. Naming the identifying
+   * field (`dedupeBy: "sku"`, or several names for a composite key) lets the
+   * merge see they are one item and **union their fields** instead.
+   *
+   * An item missing any named field, or holding it as `null`, is not
+   * identifiable and falls back to whole-value equality — the safe direction,
+   * since it then stays a separate item rather than being folded into one it
+   * may not match. `dedupe` still applies: two readings merge only when their
+   * windows overlap.
+   */
+  dedupeBy?: DedupeBy
   /**
    * How to treat two chunks that reported different values for one field.
    * Default: `"first"`.
@@ -229,9 +249,9 @@ function isAbort(error: unknown): boolean {
  * Merging is deterministic and does not call the model: array fields are
  * concatenated, and a repeat two chunks reported is dropped only when their
  * windows overlap (`dedupe: "none"` keeps every repeat); other fields take the
- * first non-null value in chunk order. It cannot reconcile a value reworded
- * across two chunks, and a record longer than `overlap` that straddles a
- * boundary can still be lost.
+ * first non-null value in chunk order. A reworded array item can be reconciled
+ * by naming an entity key (`dedupeBy`), which unions the two readings' fields.
+ * A record longer than `overlap` that straddles a boundary can still be lost.
  */
 export async function createDocument<T extends z.ZodType>(
   client: AnyClient,
@@ -409,6 +429,7 @@ export async function createDocument<T extends z.ZodType>(
     data: mergeInto(params.schema, values, chunkErrors, {
       dedupe: params.dedupe ?? "overlap",
       onConflict: params.onConflict ?? "first",
+      ...(params.dedupeBy !== undefined ? { dedupeBy: params.dedupeBy } : {}),
     }),
     chunks: outcomes,
     usage,

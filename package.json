@@ -1,6 +1,6 @@
 {
   "name": "@tomnio/rubric",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Schema-first structured extraction from LLMs",
   "type": "module",
   "main": "./dist/index.js",

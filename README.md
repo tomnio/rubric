@@ -500,6 +500,18 @@ OPENAI_API_KEY=... pnpm example:extract-long-document
 RUBRIC_EX_SMOKE=1 OPENAI_API_KEY=... pnpm example:extract-long-document  # 4 pages, cheap
 ```
 
+One full-size run (56 pages, 40 planted entities, `gpt-5.6-luna` via an OpenAI-compatible gateway):
+
+```
+document: 111,804 chars (~56 pages), 40 planted entities (8 reworded across chunk boundaries)
+
+approach   chunks  items  recall  dupRate  tokens  wall
+naive      1       502    100%    0%       n/a     98s
+chunked    29      502    100%    0%       167k    462s
+```
+
+The naive call succeeded here because the document fits in context — its risks are truncation and schema failure on longer inputs, which the example reports instead of hiding. The chunked path shows the mechanics: 29 chunk calls, all 8 boundary-straddling reworded pairs reunited by `dedupeBy`, and the planted `totalRevenue` conflict resolved to the first value under the default `onConflict`.
+
 `startIndex` / `endIndex` are absolute offsets into the document you passed in, so you can trace any value back to where it came from.
 
 `createDocument()` takes the same options as `create()` (`maxRetries`, `mode`, `temperature`, `max_tokens`, `top_p`, `signal`, `tokenBudget`, `timeout`, `hooks`) — with `tokenBudget` and `timeout` widened to the whole document — plus:

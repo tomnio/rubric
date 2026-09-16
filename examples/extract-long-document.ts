@@ -98,7 +98,8 @@ const ChunkReport = z.object({
 
 const instruction =
   "Extract the report's total revenue and every transaction line " +
-  "(sku, description, amount in dollars, region)."
+  "(sku, description, amount in dollars, region). " +
+  "Skip lines that are cut off or incomplete — do not guess missing values."
 
 // --- Runners --------------------------------------------------------------
 interface RunOutcome {

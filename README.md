@@ -491,6 +491,15 @@ data.title     // merged, validated against Invoice
 chunks[0]      // { index, startIndex, endIndex, value, usage }
 ```
 
+#### Long documents: naive vs chunked
+
+[`examples/extract-long-document.ts`](examples/extract-long-document.ts) (`pnpm example:extract-long-document`) generates a ~55-page simulated report with **known planted entities**, then extracts it two ways — one `create()` call over the whole text, and `createDocument()` with chunking, `dedupeBy`, and `onConflict` — and scores both: recall of the planted entities, duplicate rate from overlapping chunks, tokens, and wall time. Some planted transactions are deliberately reworded across chunk boundaries so only an entity-key merge can reunite them, and the report header states `totalRevenue` twice with different values so `onConflict` has something to guard.
+
+```bash
+OPENAI_API_KEY=... pnpm example:extract-long-document
+RUBRIC_EX_SMOKE=1 OPENAI_API_KEY=... pnpm example:extract-long-document  # 4 pages, cheap
+```
+
 `startIndex` / `endIndex` are absolute offsets into the document you passed in, so you can trace any value back to where it came from.
 
 `createDocument()` takes the same options as `create()` (`maxRetries`, `mode`, `temperature`, `max_tokens`, `top_p`, `signal`, `tokenBudget`, `timeout`, `hooks`) — with `tokenBudget` and `timeout` widened to the whole document — plus:

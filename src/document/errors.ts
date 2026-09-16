@@ -36,6 +36,57 @@ export class DocumentChunkError extends Error {
   }
 }
 
+/** One value a chunk reported for a conflicting field. */
+export type ConflictValue = {
+  value: unknown
+  /** Absolute offset of the window the value was read from. */
+  startIndex: number
+  endIndex: number
+}
+
+/** A field two or more chunks reported with values that are not equal. */
+export type ConflictEntry = {
+  /** The field that disagreed, or `"(root)"` for a scalar root. */
+  key: string
+  /** Every non-null value reported, in chunk order. */
+  values: ConflictValue[]
+}
+
+/**
+ * Two chunks reported different values for the same field, under
+ * `onConflict: "error"`.
+ *
+ * The default merge takes the first value and silently drops the rest. That is
+ * usually what a caller wants — chunk order roughly follows document order —
+ * but it can hide a real disagreement: the document may say one thing in one
+ * place and another later, and "first wins" reports neither to the caller.
+ * `onConflict: "error"` turns that silent choice into a failure.
+ *
+ * Equality is the same structural comparison array dedupe uses, so two chunks
+ * that agree (the common case, where overlapping windows read the same text)
+ * are not a conflict; only genuinely different values are.
+ */
+export class DocumentConflictError extends Error {
+  /** Every conflicting field, in the order the merge visited them. */
+  readonly conflicts: ConflictEntry[]
+  /** Chunks that failed before merging, if any. */
+  readonly chunkErrors: DocumentChunkError[]
+
+  constructor(
+    message: string,
+    details: {
+      conflicts: ConflictEntry[]
+      chunkErrors: DocumentChunkError[]
+    },
+  ) {
+    super(message)
+    this.name = "DocumentConflictError"
+    this.conflicts = details.conflicts
+    this.chunkErrors = details.chunkErrors
+    Object.setPrototypeOf(this, new.target.prototype)
+  }
+}
+
 /**
  * The merged object failed the caller's schema.
  *

@@ -46,6 +46,7 @@ const user = await client.create({
 | **Stream** | `createPartial()` incomplete objects (closed subtrees validated); `createIterable()` complete list items |
 | **Images** | `imageUrl(url)` in `messages[].content` (Anthropic maps these to `image` / `source`) |
 | **Documents** | `createDocument()` splits a long text, extracts per chunk, and merges — `@tomnio/rubric/document` |
+| **Conflicts** | `onConflict: "error"` fails on a field two chunks reported differently, instead of silently keeping the first |
 
 Not included: a `from_provider("vendor/model")` router, CLI, batch jobs, or cache.
 
@@ -493,6 +494,7 @@ chunks[0]      // { index, startIndex, endIndex, value, usage }
 | `onChunkError` | `"skip"` | `"skip"` records the failure and continues; `"abort"` throws. |
 | `chunkTokenBudget` | — | Cumulative token cap for **each** chunk, on top of `tokenBudget`. |
 | `dedupe` | `"overlap"` | How to treat a repeat two chunks reported. See below. |
+| `onConflict` | `"first"` | How to treat two chunks that reported different values for one field. See below. |
 
 `tokenBudget` is measured across the **whole document**, not per chunk: it spans every chunk and every reask, so `tokenBudget: 50_000` on a 100-chunk document is 50k tokens total. It is checked *before* each chunk, so it blocks the next chunk rather than discarding one already paid for — a document whose final chunk crosses the budget is still returned, and the error carries the document-wide `usage`. Pass `chunkTokenBudget` as well to also cap each chunk individually; a chunk that reaches it fails and is handled by `onChunkError` like any other chunk failure. `timeout` follows the same shape: one deadline for the **whole document**, started once and shared by every chunk, so `timeout: 30_000` on a 100-chunk document is 30 seconds total rather than 30 seconds each. When it elapses the chunk in flight is aborted and the call throws — like an aborted `signal`, already-extracted chunks are not returned. `maxRetries` is validated up front, before any chunk runs, so a bad value fails once with `TypeError` / `RangeError` instead of being buried in a per-chunk error.
 
@@ -527,6 +529,22 @@ A `Chunker` only **splits and positions** — it does not apply `overlap`. `crea
 | array | The per-chunk arrays are concatenated the same way. |
 | scalar (`z.string()`, `z.date()`, ...) | The first non-null value wins. |
 
+**Scalar conflicts: keep the first, or fail?** "First non-null wins" is the default because chunk order roughly follows document order, so the first value is usually the one you want. But it can hide a real disagreement — the document may say one thing in one place and another later, and the default reports neither. Pass `onConflict: "error"` to throw `DocumentConflictError` instead, listing every field the chunks disagreed on and every value each one reported (with the window it was read from):
+
+```ts
+try {
+  await createDocument(client, { ..., onConflict: "error" })
+} catch (err) {
+  if (err instanceof DocumentConflictError) {
+    for (const c of err.conflicts) {
+      console.log(c.key, c.values)   // [{ value, startIndex, endIndex }, ...]
+    }
+  }
+}
+```
+
+Two chunks that **agree** are never a conflict — equality is the same structural comparison array dedupe uses, so overlapping windows that read the same text (the common case) pass. A nested object is an **atomic** value, so two different ones are a conflict; `null` counts as **absence**, not a value, so a chunk-tolerant schema (which reports unseen fields as `null`) does not conflict with a chunk that saw the field; and array fields are **exempt** — they concatenate, so there is nothing to choose between.
+
 **Array fields: when is a repeat removed?** A value that more than one chunk reported is dropped only when those chunks' windows **overlap** — overlapping windows read the same text, so they are two views of one item. The default is `dedupe: "overlap"`:
 
 ```ts
@@ -544,7 +562,7 @@ await createDocument(client, { ..., dedupe: "none" })   // keep every repeat
 What this means in practice:
 
 - A value **reworded** in two chunks (same meaning, different text) is *not* merged — you get both.
-- A conflicting scalar keeps the **first** value and silently discards the later one.
+- A conflicting scalar keeps the **first** value and silently discards the later one (unless you pass `onConflict: "error"`).
 - A record longer than `overlap` that straddles a boundary can still be lost.
 - **Known limit:** two genuine duplicates that happen to sit in two *overlapping* chunks are still collapsed — overlapping windows leave no signal to tell them apart from an overlap repeat. Use `dedupe: "none"` if that matters.
 

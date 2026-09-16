@@ -3,6 +3,7 @@ import { z } from "zod"
 import {
   createDocument,
   DocumentChunkError,
+  DocumentInterruptedError,
   DocumentNoDataError,
   type Chunker,
 } from "../src/document/index.js"
@@ -115,7 +116,11 @@ describe("createDocument() document-wide tokenBudget", () => {
 
     const error = await run(client, { tokenBudget: 100 }).catch((err) => err)
 
-    expect(error).toBeInstanceOf(TokenBudgetExceeded)
+    expect(error).toBeInstanceOf(DocumentInterruptedError)
+    expect((error as DocumentInterruptedError).reason).toBe("token-budget")
+    expect((error as DocumentInterruptedError).cause).toBeInstanceOf(
+      TokenBudgetExceeded,
+    )
     expect(calls()).toBe(1)
   })
 
@@ -124,12 +129,16 @@ describe("createDocument() document-wide tokenBudget", () => {
 
     const error = (await run(client, { tokenBudget: 100 }).catch(
       (err) => err,
-    )) as TokenBudgetExceeded
+    )) as DocumentInterruptedError
 
-    expect(error.message).toMatch(/^Document token budget/)
+    // The document-scope phrasing stays on the cause, where the budget
+    // guardrail itself raised it.
+    expect((error.cause as TokenBudgetExceeded).message).toMatch(
+      /^Document token budget/,
+    )
     // The totals on the error are the document's, not one chunk's.
     expect(error.usage.totalTokens).toBe(100)
-    expect(error.budget).toBe(100)
+    expect((error.cause as TokenBudgetExceeded).budget).toBe(100)
   })
 
   it("returns a document whose final chunk crosses the budget", async () => {
@@ -216,7 +225,8 @@ describe("createDocument() document-wide tokenBudget", () => {
 
     const error = await run(client, {}, { tokenBudget: 100 }).catch((err) => err)
 
-    expect(error).toBeInstanceOf(TokenBudgetExceeded)
+    expect(error).toBeInstanceOf(DocumentInterruptedError)
+    expect((error as DocumentInterruptedError).reason).toBe("token-budget")
     expect(calls()).toBe(1)
   })
 
@@ -226,7 +236,11 @@ describe("createDocument() document-wide tokenBudget", () => {
     // blind — the same rule create() applies within one call.
     const { client } = sequenceClient([[{ statement: "grounded" }, undefined]])
 
-    await expect(run(client, { tokenBudget: 10_000 })).rejects.toBeInstanceOf(
+    const error = await run(client, { tokenBudget: 10_000 }).catch((err) => err)
+
+    expect(error).toBeInstanceOf(DocumentInterruptedError)
+    expect((error as DocumentInterruptedError).reason).toBe("usage-unavailable")
+    expect((error as DocumentInterruptedError).cause).toBeInstanceOf(
       TokenUsageUnavailableError,
     )
   })

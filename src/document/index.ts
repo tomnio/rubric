@@ -5,15 +5,22 @@ import {
   assertTokenBudget,
   budgetError,
 } from "../budget.js"
+import { TokenUsageUnavailableError } from "../errors.js"
 import { toLLMClient, type AnyClient } from "../client.js"
 import { combineSignal } from "../deadline.js"
 import { extract } from "../extract.js"
 import type { CreateParams, Hooks, Message, WrapOptions } from "../types.js"
 import { emptyUsage, sumUsage, type TokenUsage } from "../usage.js"
 import { chunkDocument, type Chunker } from "./chunker.js"
-import { DocumentChunkError, DocumentNoDataError } from "./errors.js"
+import {
+  DocumentChunkError,
+  DocumentInterruptedError,
+  DocumentNoDataError,
+  type InterruptReason,
+} from "./errors.js"
 import {
   mergeInto,
+  mergePartial,
   type ChunkValue,
   type ConflictMode,
   type DedupeBy,
@@ -25,10 +32,11 @@ export type { Chunker, ChunkerOptions, DocumentChunk } from "./chunker.js"
 export {
   DocumentChunkError,
   DocumentConflictError,
+  DocumentInterruptedError,
   DocumentMergeError,
   DocumentNoDataError,
 } from "./errors.js"
-export type { ConflictEntry, ConflictValue } from "./errors.js"
+export type { ConflictEntry, ConflictValue, InterruptReason } from "./errors.js"
 export { mergeChunks, mergeInto } from "./merge.js"
 export type {
   ChunkValue,
@@ -156,10 +164,12 @@ export type DocumentParams<T extends z.ZodType> = Omit<
    * many chunks, so the budget spans all of them: it is measured across every
    * chunk and every reask, and `tokenBudget: 50_000` on a 100-chunk document
    * means 50k tokens total, not 50k per chunk. Once the running total reaches
-   * it, no further chunk is started and the call throws `TokenBudgetExceeded`
-   * (or `TokenUsageUnavailableError` when a response omitted usage metadata) —
-   * like an aborted `signal`, already-extracted chunks are not returned. The
-   * error's `usage` is the document-wide total.
+   * it, no further chunk is started and the call throws
+   * `DocumentInterruptedError` (reason "token-budget", or "usage-unavailable"
+   * when a response omitted usage metadata; the underlying
+   * `TokenBudgetExceeded` is on `cause`) — already-extracted chunks ride on
+   * the error's `chunks` and `partial`. The error's `usage` is the
+   * document-wide total.
    *
    * Set `chunkTokenBudget` as well to also cap each chunk individually.
    */
@@ -180,8 +190,9 @@ export type DocumentParams<T extends z.ZodType> = Omit<
    * chunks, so the deadline is shared: it is started once and every chunk runs
    * under it. `timeout: 30_000` on a 100-chunk document means 30 seconds total,
    * not 30 seconds per chunk. When it elapses the chunk in flight is aborted
-   * and the call throws, like an aborted `signal` — already-extracted chunks
-   * are not returned.
+   * and the call throws `DocumentInterruptedError` (reason "timeout"; like an
+   * aborted `signal`) — already-extracted chunks ride on the error's `chunks`
+   * and `partial`.
    */
   timeout?: number
 }
@@ -237,6 +248,13 @@ function isAbort(error: unknown): boolean {
     error instanceof Error &&
     (error.name === "AbortError" || error.name === "TimeoutError")
   )
+}
+
+/** Which interrupt a deadline/abort error represents. */
+function interruptReason(error: unknown): InterruptReason {
+  return error instanceof Error && error.name === "TimeoutError"
+    ? "timeout"
+    : "aborted"
 }
 
 /**
@@ -309,8 +327,33 @@ export async function createDocument<T extends z.ZodType>(
   // applies within a call, lifted to the document.
   let usageAvailable = true
 
+  /**
+   * Build the error for an interrupted run: everything extracted so far rides
+   * on the error instead of being dropped. `partial` is a best-effort merge of
+   * the completed chunks — deliberately not validated (an interrupted document
+   * usually cannot satisfy the schema) and forced to "first" conflict mode
+   * (salvage, not refereeing). `undefined` when no chunk finished.
+   */
+  const interrupted = (reason: InterruptReason, cause: unknown): DocumentInterruptedError => {
+    const partial =
+      values.length > 0
+        ? mergePartial(params.schema, values, {
+            dedupe: params.dedupe ?? "overlap",
+            ...(params.dedupeBy !== undefined ? { dedupeBy: params.dedupeBy } : {}),
+          })
+        : undefined
+    return new DocumentInterruptedError(
+      `Document interrupted (${reason}) after ${outcomes.length} of ${chunks.length} chunk(s): ${cause instanceof Error ? cause.message : String(cause)}. Extracted chunks are on .chunks and .partial.`,
+      { reason, partial, chunks: outcomes, usage, cause },
+    )
+  }
+
   for (const [index, chunk] of chunks.entries()) {
-    signal?.throwIfAborted()
+    try {
+      signal?.throwIfAborted()
+    } catch (error) {
+      throw interrupted(interruptReason(error), error)
+    }
 
     // The document budget, checked before each chunk rather than after, so it
     // blocks the *next* chunk instead of discarding one already paid for. This
@@ -326,7 +369,12 @@ export async function createDocument<T extends z.ZodType>(
         "Document token budget",
       )
       if (overBudget !== undefined) {
-        throw overBudget
+        throw interrupted(
+          overBudget instanceof TokenUsageUnavailableError
+            ? "usage-unavailable"
+            : "token-budget",
+          overBudget,
+        )
       }
     }
 
@@ -366,9 +414,10 @@ export async function createDocument<T extends z.ZodType>(
       usageAvailable = usageAvailable && chunkUsageAvailable
       // An aborted signal or an elapsed deadline stops the whole document:
       // the caller asked for the run to end, so a failed chunk is not a
-      // per-chunk problem to record and move past.
+      // per-chunk problem to record and move past. The run's partial output
+      // rides out on the error rather than being dropped.
       if (isAbort(error) || signal?.aborted) {
-        throw error
+        throw interrupted(interruptReason(error), error)
       }
       const failure = new DocumentChunkError(
         `Chunk ${index} failed: ${error instanceof Error ? error.message : String(error)}`,

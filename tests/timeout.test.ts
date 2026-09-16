@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
 import { wrap, type LLMClient, type RequestKwargs } from "../src/index.js"
-import { createDocument, type Chunker } from "../src/document/index.js"
+import { createDocument, DocumentInterruptedError, type Chunker } from "../src/document/index.js"
 
 const User = z.object({
   name: z.string(),
@@ -290,18 +290,21 @@ describe("createDocument() timeout", () => {
     }
 
     const started = Date.now()
-    await expect(
-      createDocument(client, {
-        model: "m",
-        document: "abcdefghij",
-        instruction: "Extract.",
-        schema: z.object({ statement: z.string() }),
-        chunkSize: 4,
-        overlap: 0,
-        chunker: fixedChunker(4),
-        timeout: 70,
-      }),
-    ).rejects.toMatchObject({ name: "TimeoutError" })
+    const error = await createDocument(client, {
+      model: "m",
+      document: "abcdefghij",
+      instruction: "Extract.",
+      schema: z.object({ statement: z.string() }),
+      chunkSize: 4,
+      overlap: 0,
+      chunker: fixedChunker(4),
+      timeout: 70,
+    }).catch((err) => err as DocumentInterruptedError)
+
+    const interrupted = error as DocumentInterruptedError
+    expect(interrupted).toBeInstanceOf(DocumentInterruptedError)
+    expect(interrupted.reason).toBe("timeout")
+    expect((interrupted.cause as Error).name).toBe("TimeoutError")
     const elapsed = Date.now() - started
 
     expect(calls).toBeLessThan(3)
@@ -321,18 +324,20 @@ describe("createDocument() timeout", () => {
       },
     }
 
-    await expect(
-      createDocument(client, {
-        model: "m",
-        document: "abcdefghij",
-        instruction: "Extract.",
-        schema: z.object({ statement: z.string() }),
-        chunkSize: 4,
-        overlap: 0,
-        chunker: fixedChunker(4),
-        timeout: 60,
-      }),
-    ).rejects.toMatchObject({ name: "TimeoutError" })
+    const error = await createDocument(client, {
+      model: "m",
+      document: "abcdefghij",
+      instruction: "Extract.",
+      schema: z.object({ statement: z.string() }),
+      chunkSize: 4,
+      overlap: 0,
+      chunker: fixedChunker(4),
+      timeout: 60,
+    }).catch((err) => err as DocumentInterruptedError)
+
+    const interrupted = error as DocumentInterruptedError
+    expect(interrupted).toBeInstanceOf(DocumentInterruptedError)
+    expect(interrupted.reason).toBe("timeout")
 
     expect(calls).toBeLessThan(3)
   })

@@ -571,6 +571,47 @@ export function mergeInto<T extends z.ZodType>(
   chunkErrors: DocumentChunkError[] = [],
   options: MergeOptions = {},
 ): z.infer<T> {
+  const merged = mergeBySchemaRoot(schema, chunks, options, chunkErrors)
+  const parsed = schema.safeParse(merged)
+  if (!parsed.success) {
+    throw new DocumentMergeError(
+      "Merged document output failed schema validation",
+      { issues: parsed.error.issues, partial: merged, chunkErrors },
+    )
+  }
+  return parsed.data
+}
+
+/**
+ * Merge completed chunk results after an interruption, without schema
+ * validation.
+ *
+ * An interrupted document usually cannot satisfy the schema — whole sections
+ * were never read — so validation is skipped and whatever the finished chunks
+ * produced is returned as-is. Conflicts resolve to the first value rather than
+ * throwing: the goal is to salvage, not to referee. The result is provisional;
+ * callers must not treat it as a complete, validated extraction.
+ */
+export function mergePartial(
+  schema: z.ZodType,
+  chunks: ChunkValue[],
+  options: MergeOptions = {},
+): unknown {
+  return mergeBySchemaRoot(
+    schema,
+    chunks,
+    { ...options, onConflict: "first" },
+    [],
+  )
+}
+
+/** Shared body of `mergeInto` / `mergePartial`, up to (not incl.) validation. */
+function mergeBySchemaRoot(
+  schema: z.ZodType,
+  chunks: ChunkValue[],
+  options: MergeOptions,
+  chunkErrors: DocumentChunkError[],
+): unknown {
   const ctx = createContext(options)
   const kind = rootKind(schema)
 
@@ -600,12 +641,5 @@ export function mergeInto<T extends z.ZodType>(
     throw conflictError(ctx.conflicts, chunkErrors)
   }
 
-  const parsed = schema.safeParse(partial)
-  if (!parsed.success) {
-    throw new DocumentMergeError(
-      "Merged document output failed schema validation",
-      { issues: parsed.error.issues, partial, chunkErrors },
-    )
-  }
-  return parsed.data
+  return partial
 }

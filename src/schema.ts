@@ -1,4 +1,4 @@
-import type { z, ZodTypeAny } from "zod"
+import type { z } from "zod"
 
 /** JSON Schema subset emitted for LLM tool / json_schema payloads. */
 export type JsonSchema = {
@@ -14,21 +14,77 @@ export type JsonSchema = {
 }
 
 type ZodDef = {
-  typeName: string
-  innerType?: ZodTypeAny
-  schema?: ZodTypeAny
-  type?: ZodTypeAny
+  /** v3: "ZodObject"-style class name; v4: "object"-style kind string. */
+  typeName?: string
+  /** v4 kind string ("object", "array", …); v3 inner schema slot. */
+  type?: string | z.ZodType
+  /** v4 array element. */
+  element?: z.ZodType
+  innerType?: z.ZodType
+  schema?: z.ZodType
   description?: string
-  values?: string[]
-  checks?: Array<{ kind: string }>
-  options?: ZodTypeAny[] | Map<string, ZodTypeAny>
+  /** v3 literal value. v4 puts an array on `values` instead. */
   value?: string | number | boolean
-  valueType?: ZodTypeAny
-  keyType?: ZodTypeAny
+  /** v3 enum values; v4 literal values. */
+  values?: string[]
+  /** v4 enum entries map (value -> value). */
+  entries?: Record<string, string | number>
+  checks?: Array<{ kind?: string; def?: { check?: string; format?: string } }>
+  options?: z.ZodType[] | Map<string, z.ZodType>
+  valueType?: z.ZodType
+  keyType?: z.ZodType
 }
 
-function def(schema: ZodTypeAny): ZodDef {
-  return schema._def as ZodDef
+/**
+ * Normalized view of a schema's internals, spanning zod 3 and zod 4.
+ *
+ * The two versions name the same concepts differently: v3 puts
+ * `"ZodObject"`-style names on `_def.typeName`, v4 puts `"object"`-style kind
+ * strings on `_def.type`. Every consumer reads the normalized `kind` instead of
+ * touching `_def` directly, so one mapping table covers both.
+ */
+type NormalizedDef = ZodDef & {
+  /** v3 typeName with the "Zod" prefix stripped ("object", "array", …). */
+  kind: string
+}
+
+const KIND_BY_TYPE_NAME: Record<string, string> = {
+  ZodString: "string",
+  ZodNumber: "number",
+  ZodNaN: "number",
+  ZodBoolean: "boolean",
+  ZodEnum: "enum",
+  ZodNativeEnum: "enum",
+  ZodLiteral: "literal",
+  ZodObject: "object",
+  ZodArray: "array",
+  ZodUnion: "union",
+  ZodDiscriminatedUnion: "union",
+  ZodRecord: "record",
+  ZodDate: "date",
+  ZodOptional: "optional",
+  ZodNullable: "nullable",
+  ZodDefault: "default",
+  ZodEffects: "effects",
+  ZodBranded: "branded",
+}
+
+function def(schema: z.ZodType): NormalizedDef {
+  const raw = schema._def as ZodDef
+  // v4: _def.type is the kind string. v3: _def.type is the inner schema (the
+  // same slot v4 uses for array elements), so the typeof check tells them
+  // apart and _def.typeName carries the kind instead.
+  const v4Kind = typeof raw.type === "string" ? raw.type : undefined
+  const kind =
+    v4Kind ??
+    (raw.typeName ? (KIND_BY_TYPE_NAME[raw.typeName] ?? raw.typeName) : "unknown")
+  // v4 stores .describe() on the schema instance, not on _def; v3 keeps it in
+  // both. Normalize to raw.description so every consumer can read it there.
+  const instanceDescription = (schema as { description?: string }).description
+  if (raw.description === undefined && instanceDescription !== undefined) {
+    raw.description = instanceDescription
+  }
+  return { ...raw, kind }
 }
 
 /**
@@ -37,7 +93,7 @@ function def(schema: ZodTypeAny): ZodDef {
  * Supports objects, arrays, unions, records, dates (ISO strings),
  * string, number, int, boolean, enum, literal, optional, and nullable.
  */
-export function jsonSchemaFromZod(schema: ZodTypeAny): JsonSchema {
+export function jsonSchemaFromZod(schema: z.ZodType): JsonSchema {
   const { inner, optional, nullable } = unwrap(schema)
   const json = convert(inner)
 
@@ -55,8 +111,8 @@ export function jsonSchemaFromZod(schema: ZodTypeAny): JsonSchema {
   return json
 }
 
-function unwrap(schema: ZodTypeAny): {
-  inner: ZodTypeAny
+function unwrap(schema: z.ZodType): {
+  inner: z.ZodType
   optional: boolean
   nullable: boolean
 } {
@@ -65,27 +121,30 @@ function unwrap(schema: ZodTypeAny): {
   let nullable = false
 
   for (;;) {
-    const typeName = def(inner).typeName
-    if (typeName === "ZodOptional") {
+    const kind = def(inner).kind
+    if (kind === "optional") {
       optional = true
-      inner = def(inner).innerType as ZodTypeAny
+      inner = def(inner).innerType as z.ZodType
       continue
     }
-    if (typeName === "ZodNullable") {
+    if (kind === "nullable") {
       nullable = true
-      inner = def(inner).innerType as ZodTypeAny
+      inner = def(inner).innerType as z.ZodType
       continue
     }
-    if (typeName === "ZodDefault") {
-      inner = def(inner).innerType as ZodTypeAny
+    if (kind === "default") {
+      inner = def(inner).innerType as z.ZodType
       continue
     }
-    if (typeName === "ZodEffects") {
-      inner = def(inner).schema as ZodTypeAny
+    if (kind === "effects") {
+      // v3: a refinement wraps the base schema in ZodEffects. v4: the refined
+      // schema keeps its own kind and carries the checks, so this branch only
+      // fires on v3.
+      inner = def(inner).schema as z.ZodType
       continue
     }
-    if (typeName === "ZodBranded") {
-      inner = def(inner).type as ZodTypeAny
+    if (kind === "branded") {
+      inner = def(inner).innerType as z.ZodType
       continue
     }
     break
@@ -94,32 +153,31 @@ function unwrap(schema: ZodTypeAny): {
   return { inner, optional, nullable }
 }
 
-function convert(schema: ZodTypeAny): JsonSchema {
-  const typeName = def(schema).typeName
+function convert(schema: z.ZodType): JsonSchema {
+  const kind = def(schema).kind
 
-  switch (typeName) {
-    case "ZodString":
+  switch (kind) {
+    case "string":
       return { type: "string" }
-    case "ZodNumber": {
-      const isInt = (def(schema).checks ?? []).some((check) => check.kind === "int")
+    case "number": {
+      const isInt = isIntegerSchema(schema)
       return { type: isInt ? "integer" : "number" }
     }
-    case "ZodBoolean":
+    case "boolean":
       return { type: "boolean" }
-    case "ZodEnum":
-      return { type: "string", enum: [...(def(schema).values ?? [])] }
-    case "ZodObject":
+    case "enum":
+      return { type: "string", enum: enumValues(def(schema)) }
+    case "object":
       return convertObject(schema as z.ZodObject<z.ZodRawShape>)
-    case "ZodArray": {
-      const element = def(schema).type as ZodTypeAny
+    case "array": {
+      const element = arrayElement(schema)
       return { type: "array", items: jsonSchemaFromZod(element) }
     }
-    case "ZodLiteral":
-      return convertLiteral(def(schema).value)
-    case "ZodUnion":
-    case "ZodDiscriminatedUnion":
+    case "literal":
+      return convertLiteral(def(schema))
+    case "union":
       return { anyOf: unionOptions(schema).map((option) => jsonSchemaFromZod(option)) }
-    case "ZodRecord": {
+    case "record": {
       const valueType = def(schema).valueType
       if (!valueType) {
         throw new Error('ZodRecord is missing valueType')
@@ -129,16 +187,60 @@ function convert(schema: ZodTypeAny): JsonSchema {
         additionalProperties: jsonSchemaFromZod(valueType),
       }
     }
-    case "ZodDate":
+    case "date":
       return { type: "string", format: "date-time" }
     default:
       throw new Error(
-        `Unsupported Zod type "${typeName}". Supported: object, array, union, record, date, string, number, int, boolean, enum, literal, optional, nullable.`,
+        `Unsupported Zod type "${kind}". Supported: object, array, union, record, date, string, number, int, boolean, enum, literal, optional, nullable.`,
       )
   }
 }
 
-function convertLiteral(value: string | number | boolean | undefined): JsonSchema {
+/**
+ * The array element schema, across versions: v4 calls it `_def.element`,
+ * v3 calls it `_def.type`.
+ */
+function arrayElement(schema: z.ZodType): z.ZodType {
+  const d = def(schema)
+  const element = (d.element ?? d.type) as z.ZodType | undefined
+  if (!element) {
+    throw new Error("ZodArray is missing its element schema")
+  }
+  return element
+}
+
+/**
+ * Whether a number schema is an integer, across versions: v4 exposes `.isInt`
+ * on the schema itself, v3 marks it with a `kind: "int"` check.
+ */
+function isIntegerSchema(schema: z.ZodType): boolean {
+  const self = schema as { isInt?: boolean }
+  if (typeof self.isInt === "boolean") {
+    return self.isInt
+  }
+  return (def(schema).checks ?? []).some((check) => check.kind === "int")
+}
+
+/**
+ * Enum values, across versions: v3 keeps an array on `_def.values`, v4 keeps
+ * a value->value map on `_def.entries`.
+ */
+function enumValues(defn: NormalizedDef): string[] {
+  if (defn.values) {
+    return [...defn.values]
+  }
+  if (defn.entries) {
+    return Object.keys(defn.entries)
+  }
+  return []
+}
+
+/**
+ * Literal schema to JSON Schema, across versions: v3 stores the single value
+ * on `_def.value`, v4 stores a (usually one-element) array on `_def.values`.
+ */
+function convertLiteral(defn: NormalizedDef): JsonSchema {
+  const value = defn.value ?? defn.values?.[0]
   if (typeof value === "string") {
     return { type: "string", enum: [value] }
   }
@@ -151,7 +253,7 @@ function convertLiteral(value: string | number | boolean | undefined): JsonSchem
   throw new Error("Unsupported Zod literal value")
 }
 
-function unionOptions(schema: ZodTypeAny): ZodTypeAny[] {
+function unionOptions(schema: z.ZodType): z.ZodType[] {
   const options = def(schema).options
   if (Array.isArray(options)) {
     return options
@@ -168,7 +270,7 @@ const ROOT_ARRAY_KEY = "items"
  * OpenAI tools / json_schema require a root object.
  * Root arrays are wrapped as `{ items: T[] }`.
  */
-export function llmJsonSchemaFromZod(schema: ZodTypeAny): JsonSchema {
+export function llmJsonSchemaFromZod(schema: z.ZodType): JsonSchema {
   const json = jsonSchemaFromZod(schema)
   if (json.type !== "array") {
     return json
@@ -182,7 +284,7 @@ export function llmJsonSchemaFromZod(schema: ZodTypeAny): JsonSchema {
 }
 
 /** If the schema is a root array, accept either `T[]` or `{ items: T[] }`. */
-export function coerceParsedValue(schema: ZodTypeAny, json: unknown): unknown {
+export function coerceParsedValue(schema: z.ZodType, json: unknown): unknown {
   let value = json
   if (isRootArray(schema)) {
     if (
@@ -197,14 +299,14 @@ export function coerceParsedValue(schema: ZodTypeAny, json: unknown): unknown {
   return coerceBySchema(schema, value)
 }
 
-function coerceBySchema(schema: ZodTypeAny, json: unknown): unknown {
+function coerceBySchema(schema: z.ZodType, json: unknown): unknown {
   const { inner, nullable } = unwrap(schema)
   if (json === null && nullable) {
     return null
   }
-  const typeName = def(inner).typeName
+  const kind = def(inner).kind
 
-  if (typeName === "ZodDate") {
+  if (kind === "date") {
     if (json instanceof Date) {
       return json
     }
@@ -217,24 +319,25 @@ function coerceBySchema(schema: ZodTypeAny, json: unknown): unknown {
     return json
   }
 
-  if (typeName === "ZodObject" && json !== null && typeof json === "object" && !Array.isArray(json)) {
+  if (kind === "object" && json !== null && typeof json === "object" && !Array.isArray(json)) {
     const shape = (inner as z.ZodObject<z.ZodRawShape>).shape
     const record = json as Record<string, unknown>
     const out: Record<string, unknown> = { ...record }
     for (const [key, field] of Object.entries(shape)) {
       if (key in record) {
-        out[key] = coerceBySchema(field, record[key])
+        // v4 types shape fields as core $ZodType; narrow to the classic type.
+        out[key] = coerceBySchema(field as z.ZodType, record[key])
       }
     }
     return out
   }
 
-  if (typeName === "ZodArray" && Array.isArray(json)) {
-    const element = def(inner).type as ZodTypeAny
+  if (kind === "array" && Array.isArray(json)) {
+    const element = arrayElement(inner)
     return json.map((item) => coerceBySchema(element, item))
   }
 
-  if (typeName === "ZodRecord" && json !== null && typeof json === "object" && !Array.isArray(json)) {
+  if (kind === "record" && json !== null && typeof json === "object" && !Array.isArray(json)) {
     const valueType = def(inner).valueType
     if (!valueType) {
       return json
@@ -246,7 +349,7 @@ function coerceBySchema(schema: ZodTypeAny, json: unknown): unknown {
     return out
   }
 
-  if (typeName === "ZodUnion" || typeName === "ZodDiscriminatedUnion") {
+  if (kind === "union") {
     for (const option of unionOptions(inner)) {
       const coerced = coerceBySchema(option, json)
       if (option.safeParse(coerced).success) {
@@ -270,18 +373,18 @@ export type RootKind = "array" | "object" | "other"
  * is more reliable than inspecting runtime values, which cannot tell a
  * `z.date()` root apart from an object root.
  */
-export function rootKind(schema: ZodTypeAny): RootKind {
-  const typeName = def(unwrap(schema).inner).typeName
-  if (typeName === "ZodArray") {
+export function rootKind(schema: z.ZodType): RootKind {
+  const kind = def(unwrap(schema).inner).kind
+  if (kind === "array") {
     return "array"
   }
-  if (typeName === "ZodObject" || typeName === "ZodRecord") {
+  if (kind === "object" || kind === "record") {
     return "object"
   }
   return "other"
 }
 
-function isRootArray(schema: ZodTypeAny): boolean {
+function isRootArray(schema: z.ZodType): boolean {
   return rootKind(schema) === "array"
 }
 
@@ -290,9 +393,11 @@ function convertObject(schema: z.ZodObject<z.ZodRawShape>): JsonSchema {
   const required: string[] = []
 
   for (const [key, field] of Object.entries(schema.shape)) {
-    const { inner, optional, nullable } = unwrap(field)
+    // v4 types shape fields as core $ZodType; narrow to the classic type.
+    const fieldSchema = field as z.ZodType
+    const { inner, optional, nullable } = unwrap(fieldSchema)
     const json = convert(inner)
-    const description = def(field).description ?? def(inner).description
+    const description = def(fieldSchema).description ?? def(inner).description
     if (description !== undefined) {
       json.description = description
     }

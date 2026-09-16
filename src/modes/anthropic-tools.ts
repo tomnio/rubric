@@ -1,4 +1,4 @@
-import type { ZodTypeAny } from "zod"
+import type { z } from "zod"
 import {
   formatError,
   JsonParseError,
@@ -42,7 +42,7 @@ function toolUseBlock(
 }
 
 export const anthropicToolsHandler: ModeHandler = {
-  prepareRequest(schema: ZodTypeAny, kwargs: RequestKwargs): RequestKwargs {
+  prepareRequest(schema: z.ZodType, kwargs: RequestKwargs): RequestKwargs {
     const systemParts: string[] = []
     const messages: Message[] = []
     for (const message of kwargs.messages) {

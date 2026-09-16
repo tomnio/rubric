@@ -30,11 +30,14 @@ export function cited<T extends ZodRawShape>(schema: ZodObject<T>) {
     [CITATION_FIELD]: z.array(z.string()).describe(CITATION_FIELD_DESCRIPTION),
   })
 
-  return extended.superRefine((value, ctx) => {
+  return extended.superRefine((raw, ctx) => {
     const context = currentContext().citation
     if (context === undefined) {
       return
     }
+    // Indexing by CITATION_FIELD needs a plain record: superRefine's inferred
+    // value type (extended + Omit intersections) doesn't expose a static key.
+    const value = raw as Record<string, unknown>
     const quotes = value[CITATION_FIELD]
     if (!Array.isArray(quotes)) {
       return

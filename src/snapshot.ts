@@ -1,36 +1,58 @@
-import type { z, ZodTypeAny } from "zod"
+import type { z } from "zod"
 import { isPlainObject, type CompletenessLookup } from "./completeness.js"
 
 type ZodDef = {
-  typeName: string
-  innerType?: ZodTypeAny
-  schema?: ZodTypeAny
-  type?: ZodTypeAny
+  /** v3: "ZodObject"-style class name; v4: "object"-style kind string. */
+  typeName?: string
+  /** v4 kind string ("object", "array", …); v3 inner schema slot. */
+  type?: string | z.ZodType
+  /** v4 array element. */
+  element?: z.ZodType
+  innerType?: z.ZodType
+  schema?: z.ZodType
 }
 
-function def(schema: ZodTypeAny): ZodDef {
-  return schema._def as ZodDef
+const KIND_BY_TYPE_NAME: Record<string, string> = {
+  ZodObject: "object",
+  ZodArray: "array",
+  ZodOptional: "optional",
+  ZodNullable: "nullable",
+  ZodDefault: "default",
+  ZodEffects: "effects",
+  ZodBranded: "branded",
+}
+
+function def(schema: z.ZodType): ZodDef & { kind: string } {
+  const raw = schema._def as ZodDef
+  // Same normalization as schema.ts: v4 carries the kind on _def.type (a
+  // string), v3 on _def.typeName (a class name). typeof tells them apart.
+  const v4Kind = typeof raw.type === "string" ? raw.type : undefined
+  const kind =
+    v4Kind ??
+    (raw.typeName ? (KIND_BY_TYPE_NAME[raw.typeName] ?? raw.typeName) : "unknown")
+  return { ...raw, kind }
 }
 
 /** Strip optional / nullable / default / effects wrappers to reach the shape. */
-function unwrap(schema: ZodTypeAny): ZodTypeAny {
+function unwrap(schema: z.ZodType): z.ZodType {
   let inner = schema
   for (;;) {
-    const typeName = def(inner).typeName
+    const kind = def(inner).kind
     if (
-      typeName === "ZodOptional" ||
-      typeName === "ZodNullable" ||
-      typeName === "ZodDefault"
+      kind === "optional" ||
+      kind === "nullable" ||
+      kind === "default"
     ) {
-      inner = def(inner).innerType as ZodTypeAny
+      inner = def(inner).innerType as z.ZodType
       continue
     }
-    if (typeName === "ZodEffects") {
-      inner = def(inner).schema as ZodTypeAny
+    if (kind === "effects") {
+      // v3 wraps refinements in ZodEffects; v4 keeps the base kind in place.
+      inner = def(inner).schema as z.ZodType
       continue
     }
-    if (typeName === "ZodBranded") {
-      inner = def(inner).type as ZodTypeAny
+    if (kind === "branded") {
+      inner = def(inner).innerType as z.ZodType
       continue
     }
     break
@@ -55,7 +77,7 @@ export type SnapshotResult = { ok: boolean; value: unknown }
  */
 export function buildSnapshot(
   value: unknown,
-  schema: ZodTypeAny,
+  schema: z.ZodType,
   tracker: CompletenessLookup,
   path = "",
 ): SnapshotResult {
@@ -74,9 +96,9 @@ export function buildSnapshot(
   }
 
   const inner = unwrap(schema)
-  const typeName = def(inner).typeName
+  const kind = def(inner).kind
 
-  if (typeName === "ZodObject" && isPlainObject(value)) {
+  if (kind === "object" && isPlainObject(value)) {
     const shape = (inner as z.ZodObject<z.ZodRawShape>).shape
     const out: Record<string, unknown> = {}
     for (const [key, child] of Object.entries(value)) {
@@ -86,9 +108,10 @@ export function buildSnapshot(
         out[key] = child
         continue
       }
+      // v4 types shape fields as core $ZodType; narrow to the classic type.
       const built = buildSnapshot(
         child,
-        fieldSchema,
+        fieldSchema as z.ZodType,
         tracker,
         path ? `${path}.${key}` : key,
       )
@@ -99,8 +122,8 @@ export function buildSnapshot(
     return { ok: true, value: out }
   }
 
-  if (typeName === "ZodArray" && Array.isArray(value)) {
-    const element = def(inner).type as ZodTypeAny
+  if (kind === "array" && Array.isArray(value)) {
+    const element = (def(inner).element ?? def(inner).type) as z.ZodType
     const out: unknown[] = []
     value.forEach((item, index) => {
       const built = buildSnapshot(item, element, tracker, `${path}[${index}]`)

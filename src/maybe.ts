@@ -1,11 +1,11 @@
-import { z, type ZodTypeAny } from "zod"
+import { z } from "zod"
 
 /**
  * Wrap a schema so extraction can report a miss instead of failing.
  *
  * Use as `create({ schema: maybe(User), ... })`.
  */
-export function maybe<T extends ZodTypeAny>(schema: T) {
+export function maybe<T extends z.ZodType>(schema: T) {
   return z.object({
     result: schema
       .nullable()

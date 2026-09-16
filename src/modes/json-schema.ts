@@ -1,4 +1,4 @@
-import type { ZodTypeAny } from "zod"
+import type { z } from "zod"
 import { JsonParseError, type SchemaValidationError } from "../errors.js"
 import { assertOpenAiStrictSchema, llmJsonSchemaFromZod } from "../schema.js"
 import type { RequestKwargs } from "../types.js"
@@ -12,7 +12,7 @@ import {
 import type { ModeHandler } from "./types.js"
 
 export const jsonSchemaHandler: ModeHandler = {
-  prepareRequest(schema: ZodTypeAny, kwargs: RequestKwargs): RequestKwargs {
+  prepareRequest(schema: z.ZodType, kwargs: RequestKwargs): RequestKwargs {
     const jsonSchema = llmJsonSchemaFromZod(schema)
     assertOpenAiStrictSchema(jsonSchema)
     return {

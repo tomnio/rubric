@@ -8,6 +8,12 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The lockfile pins zod 4; the v3 leg overrides it with the minimum
+        # supported major so both peer ranges stay covered.
+        zod-version: ["4", "3"]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -18,6 +24,9 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Install zod ${{ matrix.zod-version }}
+        if: matrix.zod-version == '3'
+        run: pnpm add -D zod@^3.25.0
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build

@@ -164,7 +164,7 @@ describe("jsonSchemaFromZod", () => {
   })
 
   it("converts records and dates", () => {
-    expect(jsonSchemaFromZod(z.record(z.number()))).toEqual({
+    expect(jsonSchemaFromZod(z.record(z.string(), z.number()))).toEqual({
       type: "object",
       additionalProperties: { type: "number" },
     })

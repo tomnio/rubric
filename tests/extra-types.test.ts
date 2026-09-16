@@ -83,7 +83,7 @@ describe("extra Zod types", () => {
 
   it("extracts a string record", async () => {
     const Bag = z.object({
-      labels: z.record(z.string()),
+      labels: z.record(z.string(), z.string()),
     })
     const client = wrap(fakeClient(toolResponse({ labels: { env: "prod", team: "core" } })))
     const bag = await client.create({

@@ -57,7 +57,7 @@ describe("JSON_SCHEMA strict checks", () => {
 
   it("rejects z.record locally", () => {
     const Bag = z.object({
-      labels: z.record(z.string()),
+      labels: z.record(z.string(), z.string()),
     })
     expect(() =>
       jsonSchemaHandler.prepareRequest(Bag, {

@@ -1,4 +1,4 @@
-import type { ZodTypeAny } from "zod"
+import type { z } from "zod"
 import { JsonParseError, type SchemaValidationError } from "../errors.js"
 import { jsonSchemaFromZod } from "../schema.js"
 import type { RequestKwargs } from "../types.js"
@@ -92,7 +92,7 @@ function matchingBracketEnd(text: string, start: number): number {
   return -1
 }
 
-function instruction(schema: ZodTypeAny): string {
+function instruction(schema: z.ZodType): string {
   const jsonSchema = JSON.stringify(jsonSchemaFromZod(schema), null, 2)
   return [
     "Reply with only JSON inside a markdown fence:",
@@ -107,7 +107,7 @@ function instruction(schema: ZodTypeAny): string {
 }
 
 export const mdJsonHandler: ModeHandler = {
-  prepareRequest(schema: ZodTypeAny, kwargs: RequestKwargs): RequestKwargs {
+  prepareRequest(schema: z.ZodType, kwargs: RequestKwargs): RequestKwargs {
     return {
       ...kwargs,
       messages: [

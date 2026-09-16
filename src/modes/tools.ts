@@ -1,4 +1,4 @@
-import type { ZodTypeAny } from "zod"
+import type { z } from "zod"
 import {
   formatError,
   JsonParseError,
@@ -20,7 +20,7 @@ import type { ModeHandler } from "./types.js"
 export const EXTRACT_TOOL_NAME = EXTRACT_NAME
 
 export const toolsHandler: ModeHandler = {
-  prepareRequest(schema: ZodTypeAny, kwargs: RequestKwargs): RequestKwargs {
+  prepareRequest(schema: z.ZodType, kwargs: RequestKwargs): RequestKwargs {
     return {
       ...kwargs,
       tools: [

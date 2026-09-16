@@ -56,14 +56,14 @@ Requires Node 20+ and [pnpm](https://pnpm.io).
 
 ```bash
 pnpm add @tomnio/rubric
-pnpm add zod@^3.24.0
+pnpm add zod
 # optional, depending on the provider:
 pnpm add openai
 pnpm add @anthropic-ai/sdk
 pnpm add @google/genai
 ```
 
-`zod` is required and must be **3.x** (`^3.24.0` or `3.25.x`). Bare `pnpm add zod` currently installs Zod 4, which does not satisfy the peer range. `openai` / `@anthropic-ai/sdk` / `@google/genai` are optional peers.
+`zod` is required and works with **both Zod 3 (>= 3.24) and Zod 4**. `openai` / `@anthropic-ai/sdk` / `@google/genai` are optional peers.
 
 The `./document` entry point needs one more optional peer — the WASM chunker. It is a separate import, so `create()` does not pull it in:
 

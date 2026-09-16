@@ -1,4 +1,4 @@
-import type { ZodTypeAny } from "zod"
+import type { z } from "zod"
 import {
   formatError,
   JsonParseError,
@@ -91,7 +91,7 @@ function responseText(raw: unknown): string | undefined {
 }
 
 export const geminiJsonHandler: ModeHandler = {
-  prepareRequest(schema: ZodTypeAny, kwargs: RequestKwargs): RequestKwargs {
+  prepareRequest(schema: z.ZodType, kwargs: RequestKwargs): RequestKwargs {
     const payload = geminiPayloadFromMessages(kwargs.messages)
     const next: RequestKwargs = {
       ...kwargs,

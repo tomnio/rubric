@@ -512,7 +512,17 @@ chunked    29      502    100%    0%       167k    462s
 
 The naive call succeeded here because the document fits in context — its risks are truncation and schema failure on longer inputs, which the example reports instead of hiding. The chunked path shows the mechanics: 29 chunk calls, all 8 boundary-straddling reworded pairs reunited by `dedupeBy`, and the planted `totalRevenue` conflict resolved to the first value under the default `onConflict`.
 
-**Why this example exists.** Chunked extraction makes a claim that is easy to doubt: cutting a document into pieces and merging per-chunk results will not lose, duplicate, or corrupt the data. This example is a repeatable check of that claim. Because the document is generated from a seed, the ground truth is known exactly — every planted entity, every boundary-straddling pair, every conflicting scalar — so recall and duplicate rate are measured against facts, not impressions. The numbers above are the claim holding at 56 pages: nothing dropped, nothing doubled, the guardrails did what they say. If a future change to the chunker, merge, or schemas breaks that, rerunning this example shows it in one number. It is deliberately not a benchmark — one document shape, one model, one seed — and the naive row winning at this size is itself part of the point: chunking earns its tokens only past context limits, which the example will show when naive starts failing.
+**Why this example exists.** Chunked extraction makes a claim that is easy to doubt: cutting a document into pieces and merging per-chunk results will not lose, duplicate, or corrupt the data. This example is a repeatable check of that claim. Because the document is generated from a seed, the ground truth is known exactly — every planted entity, every boundary-straddling pair, every conflicting scalar — so recall and duplicate rate are measured against facts, not impressions. The numbers above are the claim holding at 56 pages: nothing dropped, nothing doubled, the guardrails did what they say. If a future change to the chunker, merge, or schemas breaks that, rerunning this example shows it in one number. It is deliberately not a benchmark — one document shape, one model, one seed — and the naive row winning at this size is itself part of the point: chunking earns its tokens only past context limits.
+
+Past that limit the same experiment flips. At 151 pages (302,156 chars, same seed and entities), the naive call dies with `OutputTruncatedError` before emitting any item — recall 0% — while `createDocument()` over 77 chunks still recovers all 40 planted entities at a 0% duplicate rate:
+
+```
+document: 302,156 chars (~151 pages), 40 planted entities
+
+approach   chunks  items  recall  dupRate  tokens  wall
+naive      1       0      0%      0%       n/a     173s  (truncated)
+chunked    77      1349   100%    0%       452k    1276s
+```
 
 `startIndex` / `endIndex` are absolute offsets into the document you passed in, so you can trace any value back to where it came from.
 

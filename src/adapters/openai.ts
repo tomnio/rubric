@@ -1,10 +1,18 @@
 import type { CallOptions, LLMClient, RequestKwargs } from "../types.js"
 
-/** Duck-typed OpenAI chat client. Avoids a hard runtime dependency on `openai`. */
+/**
+ * Duck-typed OpenAI chat client. Avoids a hard runtime dependency on `openai`.
+ *
+ * `create` is written in method syntax on purpose. A property typed as a
+ * function checks its parameter contravariantly, and the real SDK's `create`
+ * takes a specific request type, so `wrap(new OpenAI())` would not typecheck.
+ * Method syntax makes the check bivariant, which is exactly what duck typing
+ * wants: any client with a compatible `create` is accepted.
+ */
 export type OpenAIChatClient = {
   chat: {
     completions: {
-      create: (body: unknown, options?: CallOptions) => Promise<unknown>
+      create(body: unknown, options?: CallOptions): Promise<unknown>
     }
   }
 }

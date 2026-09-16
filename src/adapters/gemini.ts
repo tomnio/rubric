@@ -8,11 +8,13 @@ import type { CallOptions, LLMClient, RequestKwargs } from "../types.js"
  */
 export type GeminiModelsClient = {
   models: {
-    generateContent: (body: unknown, options?: CallOptions) => Promise<unknown>
-    generateContentStream?: (
+    // Method syntax, not a function-typed property: see `OpenAIChatClient` for
+    // why the bivariant check is what lets a real SDK instance typecheck here.
+    generateContent(body: unknown, options?: CallOptions): Promise<unknown>
+    generateContentStream?(
       body: unknown,
       options?: CallOptions,
-    ) => AsyncIterable<unknown> | Promise<AsyncIterable<unknown>>
+    ): AsyncIterable<unknown> | Promise<AsyncIterable<unknown>>
   }
 }
 

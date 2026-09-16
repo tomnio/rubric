@@ -1,6 +1,7 @@
 import type { z } from "zod"
-import { assertMaxRetries } from "../budget.js"
+import { assertMaxRetries, assertTimeout } from "../budget.js"
 import { toLLMClient, type AnyClient } from "../client.js"
+import { combineSignal } from "../deadline.js"
 import { extract } from "../extract.js"
 import type { CreateParams, Hooks, Message, WrapOptions } from "../types.js"
 import { emptyUsage, sumUsage, type TokenUsage } from "../usage.js"
@@ -95,17 +96,35 @@ export type DocumentParams<T extends z.ZodType> = Omit<
    *   contain the same item twice (two identical invoice lines, say).
    */
   dedupe?: DedupeMode
+  /**
+   * Wall-clock budget for the **whole document**, in milliseconds.
+   *
+   * Unlike `create()`, where one call is one request, a document becomes many
+   * chunks, so the deadline is shared: it is started once and every chunk runs
+   * under it. `timeout: 30_000` on a 100-chunk document means 30 seconds total,
+   * not 30 seconds per chunk. When it elapses the chunk in flight is aborted
+   * and the call throws, like an aborted `signal` — already-extracted chunks
+   * are not returned.
+   */
+  timeout?: number
 }
 
 /** Rebuild the `create()` options for one chunk. */
 function chunkParams(
   params: { instruction: string } & Omit<
     CreateParams<z.ZodType>,
-    "messages" | "context"
+    "messages" | "context" | "timeout"
   >,
   schema: z.ZodType,
   chunkText: string,
   hooks: Hooks,
+  /**
+   * The document-wide signal, already carrying the deadline. Passed as the
+   * chunk's `signal` rather than as a `timeout`: each chunk would otherwise
+   * start its own timer, making the budget per-chunk (N x timeout) instead of
+   * the whole document's.
+   */
+  signal: AbortSignal | undefined,
 ): CreateParams<z.ZodType> {
   const next: CreateParams<z.ZodType> = {
     model: params.model,
@@ -122,7 +141,7 @@ function chunkParams(
   }
   if (params.maxRetries !== undefined) next.maxRetries = params.maxRetries
   if (params.mode !== undefined) next.mode = params.mode
-  if (params.signal !== undefined) next.signal = params.signal
+  if (signal !== undefined) next.signal = signal
   if (params.tokenBudget !== undefined) next.tokenBudget = params.tokenBudget
   if (params.temperature !== undefined) next.temperature = params.temperature
   if (params.max_tokens !== undefined) next.max_tokens = params.max_tokens
@@ -163,6 +182,24 @@ export async function createDocument<T extends z.ZodType>(
   // chunk, and the catch below would wrap a configuration error into a
   // DocumentChunkError, burying the cause one layer deeper.
   assertMaxRetries(params.maxRetries ?? defaults?.maxRetries)
+  // One deadline for the whole document, started here and shared by every
+  // chunk. `create()` would start its own timer per chunk, which would make
+  // the budget per-chunk.
+  const signal = combineSignal(
+    params.signal,
+    assertTimeout(params.timeout ?? defaults?.timeout),
+  )
+  // Hand extract() a `defaults` with `timeout` removed. The deadline is already
+  // on `signal`, so this does not change behaviour — the shared deadline starts
+  // earlier and always fires first. It avoids building a redundant second timer
+  // per chunk, which would be N pointless timers on a long document.
+  const chunkDefaults: WrapOptions | undefined =
+    defaults?.timeout === undefined
+      ? defaults
+      : (() => {
+          const { timeout: _dropped, ...rest } = defaults
+          return rest
+        })()
 
   const chunks = await chunkDocument(params.document, {
     chunkSize: params.chunkSize ?? DEFAULT_CHUNK_SIZE,
@@ -176,7 +213,7 @@ export async function createDocument<T extends z.ZodType>(
   let usage = emptyUsage()
 
   for (const [index, chunk] of chunks.entries()) {
-    params.signal?.throwIfAborted()
+    signal?.throwIfAborted()
 
     // extract() merges wrap-level hooks with per-call hooks; do the same here
     // so the capture sees the same handlers the caller will.
@@ -195,8 +232,8 @@ export async function createDocument<T extends z.ZodType>(
     try {
       value = await extract(
         llm,
-        chunkParams(params, chunkSchema, chunk.text, hooks),
-        defaults,
+        chunkParams(params, chunkSchema, chunk.text, hooks, signal),
+        chunkDefaults,
         // Lets every hook attribute its event to this chunk, which a plain
         // create() call has no need for.
         {
@@ -207,7 +244,10 @@ export async function createDocument<T extends z.ZodType>(
         },
       )
     } catch (error) {
-      if (isAbort(error) || params.signal?.aborted) {
+      // An aborted signal or an elapsed deadline stops the whole document:
+      // the caller asked for the run to end, so a failed chunk is not a
+      // per-chunk problem to record and move past.
+      if (isAbort(error) || signal?.aborted) {
         throw error
       }
       const failure = new DocumentChunkError(

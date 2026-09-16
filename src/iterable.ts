@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { rejectTokenBudgetForStream } from "./budget.js"
+import { rejectTimeoutForStream, rejectTokenBudgetForStream } from "./budget.js"
 import { runWithContext } from "./context.js"
 import { JsonParseError, OutputTruncatedError } from "./errors.js"
 import { attemptMeta, safeEmit } from "./hooks.js"
@@ -29,6 +29,7 @@ export async function* extractIterable<T extends z.ZodType>(
     params.tokenBudget ?? defaults?.tokenBudget,
     "createIterable",
   )
+  rejectTimeoutForStream(params.timeout ?? defaults?.timeout, "createIterable")
   if (!client.chatCompletionsStream) {
     throw new Error("LLMClient does not implement chatCompletionsStream")
   }

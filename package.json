@@ -24,6 +24,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:live": "RUBRIC_LIVE=1 vitest run tests/live --testTimeout=60000",
     "example:extract-user": "tsx examples/extract-user.ts",
     "example:extract-image": "tsx examples/extract-image.ts",
     "example:extract-user-anthropic": "tsx examples/extract-user-anthropic.ts",

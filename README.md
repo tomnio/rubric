@@ -590,6 +590,27 @@ There is deliberately no LLM "reduce" pass. A second, unvalidated model call wou
 
 Requires Node 20+. The chunker is a WASM module, so it does not run on older Node.
 
+## Live tests
+
+The test suite runs entirely against fake clients — no network, and it passes with no API key. A separate, opt-in suite makes real SDK round trips to prove the adapters, the reask loop, the citation guardrail and the document pipeline work end to end:
+
+```bash
+pnpm test:live
+```
+
+It is off unless both conditions hold: `RUBRIC_LIVE=1` (the script sets it) **and** the provider's key is present. Without a key the relevant suite skips, so `pnpm test` and CI never reach the network.
+
+Put credentials in a `.env` at the package root — gitignored, and read only by the live suite — or export them in the shell:
+
+| Variable | Purpose |
+|---|---|
+| `OPENAI_API_KEY` | OpenAI, or any OpenAI-compatible gateway |
+| `OPENAI_BASE_URL` | Point the OpenAI suite at a gateway instead of api.openai.com |
+| `OPENAI_MODEL` | Model name (default `gpt-4o-mini`) |
+| `OPENAI_MODE` | `TOOLS` \| `JSON_SCHEMA` \| `MD_JSON` — a thinking model rejects `tool_choice`, so it needs `MD_JSON` |
+| `ANTHROPIC_API_KEY` | Anthropic |
+| `ANTHROPIC_MODEL` | Claude model (default `claude-sonnet-4-6`) |
+
 ## License
 
 MIT

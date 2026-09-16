@@ -23,8 +23,8 @@ export function attemptMeta(
  * Invoke a user hook without letting it break the loop.
  *
  * Telemetry must not fail a call the caller has already paid for, so a throwing
- * handler is reported and ignored rather than propagated. This mirrors Python
- * Instructor, which warns on a failing handler instead of aborting.
+ * handler is reported and ignored rather than propagated — a hook is
+ * observability, never a control-flow decision.
  */
 export function safeEmit<A extends unknown[]>(
   name: string,

@@ -48,7 +48,7 @@ const user = await client.create({
 | **Documents** | `createDocument()` splits a long text, extracts per chunk, and merges — `@tomnio/rubric/document` |
 | **Conflicts** | `onConflict: "error"` fails on a field two chunks reported differently; `dedupeBy: "sku"` merges a reworded array item instead of doubling it |
 
-Not included: a `from_provider("vendor/model")` router, CLI, batch jobs, or cache.
+Not included: CLI, batch jobs, or cache.
 
 ## Quick start
 
@@ -110,6 +110,18 @@ Optional: `OPENAI_MODEL` (default `gpt-5.6-luna`), `ANTHROPIC_MODEL` (default `c
 | Google Gemini | `@google/genai` | `wrap(new GoogleGenAI({ apiKey }))` | `GEMINI_JSON` |
 | DeepSeek, Groq, OpenRouter, Together, Moonshot | `openai` | `wrap(new OpenAI({ baseURL: compatible.<id>.baseURL }))` | `TOOLS` (see `compatible`) |
 | Any OpenAI-compatible gateway | `openai` | `wrap(new OpenAI({ apiKey, baseURL }))` | `TOOLS` |
+
+Or skip the construction and route by name with `fromProvider("vendor/model")`:
+
+```ts
+import { fromProvider } from "@tomnio/rubric"
+
+const client = await fromProvider("deepseek/deepseek-chat", {
+  apiKey: process.env.DEEPSEEK_API_KEY,
+})
+```
+
+`fromProvider` loads the SDK dynamically, so only the package your vendor routes to needs to be installed. It accepts the same vendor names as the table above (`openai`, `anthropic`, `google`, plus the five compatible gateways, with or without a `/model` suffix); the model part is ignored because `create()` takes an explicit `model`. An explicit `mode` or `baseURL` in the options overrides the defaults from `compatible`.
 
 ```ts
 import Anthropic from "@anthropic-ai/sdk"

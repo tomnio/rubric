@@ -1,6 +1,11 @@
 import type { z } from "zod"
 import { rootKind } from "../schema.js"
-import { DocumentMergeError, type DocumentChunkError } from "./errors.js"
+import {
+  DocumentConflictError,
+  DocumentMergeError,
+  type ConflictEntry,
+  type DocumentChunkError,
+} from "./errors.js"
 
 /** One chunk's contribution to the merge, with the window it was read from. */
 export type ChunkValue = {
@@ -22,9 +27,29 @@ export type ChunkValue = {
  */
 export type DedupeMode = "overlap" | "none"
 
+/**
+ * How to treat two chunks that reported different values for the same
+ * non-array field.
+ *
+ * - `"first"` (default): keep the first non-null value in chunk order and drop
+ *   the rest silently. Chunk order roughly follows document order, so this is
+ *   usually the value the caller wants.
+ * - `"error"`: throw `DocumentConflictError` instead, listing every field the
+ *   chunks disagreed on and every value each one reported. Use this when a
+ *   silent choice would hide a real disagreement in the document.
+ *
+ * Two chunks that agree are never a conflict: equality is the same structural
+ * comparison array dedupe uses, so overlapping windows that read the same text
+ * (the common case) pass. Array fields are exempt — they concatenate, so there
+ * is nothing to choose between.
+ */
+export type ConflictMode = "first" | "error"
+
 export type MergeOptions = {
   /** Default: `"overlap"`. */
   dedupe?: DedupeMode
+  /** Default: `"first"`. */
+  onConflict?: ConflictMode
 }
 
 /**
@@ -229,33 +254,55 @@ function mergeArrayField(
   return kept.map((entry) => entry.item)
 }
 
+/** One field's non-null values, with the windows they were read from. */
+type FieldValues = {
+  key: string
+  values: Array<{ value: unknown; startIndex: number; endIndex: number }>
+}
+
 /**
- * Combine per-chunk results into one object.
+ * True when every value in the list is structurally equal to the first.
  *
- * Rules, decided per field by the runtime value:
- *
- * - **Array fields** are concatenated across chunks, and a value that two
- *   chunks reported is dropped only when their windows overlap — see
- *   `mergeArrayField`. `options.dedupe: "none"` keeps every repeat.
- * - **Every other field** takes the first non-null value seen, in chunk order.
- *   This includes nested objects, which are treated as atomic values.
- *
- * A field that no chunk reported is omitted, so a required field is caught by
- * the final schema validation rather than invented here.
- *
- * This merges *object fields*. When the schema root is an array or a scalar the
- * merge is a different shape entirely — see `mergeInto`, which picks between
- * them from the schema.
- *
- * Pure and synchronous: no LLM call, no schema needed. Callers validate the
- * result separately (see `mergeInto`).
+ * Uses the same key array dedupe does, so "equal" means the same thing in both
+ * places: `{a:1,b:2}` equals `{b:2,a:1}`, two `Date`s holding one instant are
+ * equal, and a class instance equals only itself.
  */
-export function mergeChunks(
+function allEqual(
+  values: FieldValues["values"],
+  identities: IdentityTable,
+): boolean {
+  if (values.length < 2) {
+    return true
+  }
+  const first = values[0]
+  if (first === undefined) {
+    return true
+  }
+  const reference = dedupeKey(first.value, identities)
+  return values.every(
+    (entry) => dedupeKey(entry.value, identities) === reference,
+  )
+}
+
+/**
+ * Merge the object fields chunks reported, collecting any disagreement.
+ *
+ * A **conflict** is a non-array field two chunks reported with values that are
+ * not structurally equal. `null` / `undefined` are treated as *absence*, not as
+ * a value to compare: a chunk that did not see a field usually reports it as
+ * null under a chunk-tolerant schema, and calling that a disagreement would
+ * make `onConflict: "error"` unusable with the tolerant schema the document
+ * API recommends. So the comparison is among the non-null values only.
+ *
+ * Conflicts are computed only when `onConflict` is `"error"` — the default
+ * path does no extra work.
+ */
+function mergeObjectFields(
   chunks: ChunkValue[],
-  options: MergeOptions = {},
-): Record<string, unknown> {
-  const mode = options.dedupe ?? "overlap"
-  const identities: IdentityTable = { ids: new Map<unknown, number>(), next: 0 }
+  mode: DedupeMode,
+  identities: IdentityTable,
+  onConflict: ConflictMode,
+): { merged: Record<string, unknown>; conflicts: ConflictEntry[] } {
   const objects = chunks.map((chunk) => chunk.value).filter(isPlainRecord)
   const keys = new Set<string>()
   for (const object of objects) {
@@ -265,6 +312,7 @@ export function mergeChunks(
   }
 
   const merged: Record<string, unknown> = {}
+  const conflicts: ConflictEntry[] = []
   for (const key of keys) {
     // Keep the chunk's window alongside its value: overlap-aware dedupe needs
     // to know where each value was read from.
@@ -301,10 +349,72 @@ export function mergeChunks(
       continue
     }
 
+    const values = present.map((chunk) => ({
+      value: chunk.value[key],
+      startIndex: chunk.startIndex,
+      endIndex: chunk.endIndex,
+    }))
+    if (onConflict === "error" && !allEqual(values, identities)) {
+      conflicts.push({ key, values })
+    }
     merged[key] = present[0]?.value[key]
   }
 
+  return { merged, conflicts }
+}
+
+/**
+ * Combine per-chunk results into one object.
+ *
+ * Rules, decided per field by the runtime value:
+ *
+ * - **Array fields** are concatenated across chunks, and a value that two
+ *   chunks reported is dropped only when their windows overlap — see
+ *   `mergeArrayField`. `options.dedupe: "none"` keeps every repeat.
+ * - **Every other field** takes the first non-null value seen, in chunk order.
+ *   This includes nested objects, which are treated as atomic values.
+ * - With `options.onConflict: "error"`, a non-array field two chunks reported
+ *   with different values throws `DocumentConflictError` instead of keeping the
+ *   first. See `ConflictMode`.
+ *
+ * A field that no chunk reported is omitted, so a required field is caught by
+ * the final schema validation rather than invented here.
+ *
+ * This merges *object fields*. When the schema root is an array or a scalar the
+ * merge is a different shape entirely — see `mergeInto`, which picks between
+ * them from the schema.
+ *
+ * Pure and synchronous: no LLM call, no schema needed. Callers validate the
+ * result separately (see `mergeInto`).
+ */
+export function mergeChunks(
+  chunks: ChunkValue[],
+  options: MergeOptions = {},
+): Record<string, unknown> {
+  const mode = options.dedupe ?? "overlap"
+  const identities: IdentityTable = { ids: new Map<unknown, number>(), next: 0 }
+  const { merged, conflicts } = mergeObjectFields(
+    chunks,
+    mode,
+    identities,
+    options.onConflict ?? "first",
+  )
+  if (conflicts.length > 0) {
+    throw conflictError(conflicts, [])
+  }
   return merged
+}
+
+/** Build the failure for a set of conflicts, phrased for the caller to act on. */
+function conflictError(
+  conflicts: ConflictEntry[],
+  chunkErrors: DocumentChunkError[],
+): DocumentConflictError {
+  const fields = conflicts.map((conflict) => conflict.key).join(", ")
+  return new DocumentConflictError(
+    `Chunks disagreed on ${conflicts.length} field(s) under onConflict: "error": ${fields}. The document may state different values in different places; resolve the conflict, or use onConflict: "first" to keep the first value.`,
+    { conflicts, chunkErrors },
+  )
 }
 
 /**
@@ -355,14 +465,38 @@ export function mergeInto<T extends z.ZodType>(
   options: MergeOptions = {},
 ): z.infer<T> {
   const mode = options.dedupe ?? "overlap"
+  const onConflict = options.onConflict ?? "first"
   const identities: IdentityTable = { ids: new Map<unknown, number>(), next: 0 }
   const kind = rootKind(schema)
-  const partial =
-    kind === "object"
-      ? mergeChunks(chunks, options)
-      : kind === "array"
-        ? mergeRootArray(chunks, mode, identities)
-        : mergeRootScalar(chunks.map((chunk) => chunk.value))
+
+  let partial: unknown
+  let conflicts: ConflictEntry[] = []
+  if (kind === "object") {
+    const result = mergeObjectFields(chunks, mode, identities, onConflict)
+    partial = result.merged
+    conflicts = result.conflicts
+  } else if (kind === "array") {
+    // Arrays concatenate, so there is no field to disagree on.
+    partial = mergeRootArray(chunks, mode, identities)
+  } else {
+    // A scalar root has exactly one value to end up with, so a second,
+    // different value is the same conflict as a scalar field's.
+    const values = chunks
+      .filter((chunk) => chunk.value !== null && chunk.value !== undefined)
+      .map((chunk) => ({
+        value: chunk.value,
+        startIndex: chunk.startIndex,
+        endIndex: chunk.endIndex,
+      }))
+    if (onConflict === "error" && !allEqual(values, identities)) {
+      conflicts = [{ key: "(root)", values }]
+    }
+    partial = mergeRootScalar(chunks.map((chunk) => chunk.value))
+  }
+
+  if (conflicts.length > 0) {
+    throw conflictError(conflicts, chunkErrors)
+  }
 
   const parsed = schema.safeParse(partial)
   if (!parsed.success) {

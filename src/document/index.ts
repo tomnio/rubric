@@ -12,17 +12,29 @@ import type { CreateParams, Hooks, Message, WrapOptions } from "../types.js"
 import { emptyUsage, sumUsage, type TokenUsage } from "../usage.js"
 import { chunkDocument, type Chunker } from "./chunker.js"
 import { DocumentChunkError, DocumentNoDataError } from "./errors.js"
-import { mergeInto, type ChunkValue, type DedupeMode } from "./merge.js"
+import {
+  mergeInto,
+  type ChunkValue,
+  type ConflictMode,
+  type DedupeMode,
+} from "./merge.js"
 
 export { chunkDocument, defaultChunker } from "./chunker.js"
 export type { Chunker, ChunkerOptions, DocumentChunk } from "./chunker.js"
 export {
   DocumentChunkError,
+  DocumentConflictError,
   DocumentMergeError,
   DocumentNoDataError,
 } from "./errors.js"
+export type { ConflictEntry, ConflictValue } from "./errors.js"
 export { mergeChunks, mergeInto } from "./merge.js"
-export type { ChunkValue, DedupeMode, MergeOptions } from "./merge.js"
+export type {
+  ChunkValue,
+  ConflictMode,
+  DedupeMode,
+  MergeOptions,
+} from "./merge.js"
 // The chunk descriptor createDocument() puts on every hook's AttemptMeta.
 export type { AttemptMeta, ChunkMeta } from "../types.js"
 
@@ -101,6 +113,22 @@ export type DocumentParams<T extends z.ZodType> = Omit<
    *   contain the same item twice (two identical invoice lines, say).
    */
   dedupe?: DedupeMode
+  /**
+   * How to treat two chunks that reported different values for one field.
+   * Default: `"first"`.
+   *
+   * `"first"` keeps the first non-null value in chunk order and drops the rest
+   * silently. `"error"` throws `DocumentConflictError`, listing every field the
+   * chunks disagreed on and the value each one reported — use it when a silent
+   * choice would hide a real disagreement.
+   *
+   * Two chunks that agree are never a conflict: equality is structural, so
+   * overlapping windows that read the same text pass. `null` counts as absence,
+   * not as a value, so a chunk-tolerant schema (which reports unseen fields as
+   * `null`) does not conflict with one that saw the field. Array fields are
+   * exempt — they concatenate.
+   */
+  onConflict?: ConflictMode
   /**
    * Cumulative token budget for the **whole document**.
    *
@@ -380,6 +408,7 @@ export async function createDocument<T extends z.ZodType>(
   return {
     data: mergeInto(params.schema, values, chunkErrors, {
       dedupe: params.dedupe ?? "overlap",
+      onConflict: params.onConflict ?? "first",
     }),
     chunks: outcomes,
     usage,

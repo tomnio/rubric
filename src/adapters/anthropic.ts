@@ -1,9 +1,14 @@
 import type { CallOptions, LLMClient, RequestKwargs } from "../types.js"
 
-/** Duck-typed Anthropic messages client. No hard dependency on the SDK. */
+/**
+ * Duck-typed Anthropic messages client. No hard dependency on the SDK.
+ *
+ * Method syntax, not a function-typed property: see `OpenAIChatClient` for why
+ * the bivariant check is what lets `wrap(new Anthropic())` typecheck.
+ */
 export type AnthropicMessagesClient = {
   messages: {
-    create: (body: unknown, options?: CallOptions) => Promise<unknown>
+    create(body: unknown, options?: CallOptions): Promise<unknown>
   }
 }
 

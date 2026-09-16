@@ -18,8 +18,14 @@ type Span = { start: number; end: number }
  * source substring.
  *
  * Without a `context`, the field passes through unchecked.
+ *
+ * The generic is over the shape, not the object: parameterising by
+ * `ZodObject<ZodRawShape>` loses the concrete shape through `extend()` and the
+ * return type degrades to `unknown`, so callers would have to cast the result
+ * of `create()` to read `substring_quotes`. Taking `ZodObject<T>` keeps the
+ * inferred output typed.
  */
-export function cited<T extends ZodObject<ZodRawShape>>(schema: T) {
+export function cited<T extends ZodRawShape>(schema: ZodObject<T>) {
   const extended = schema.extend({
     [CITATION_FIELD]: z.array(z.string()).describe(CITATION_FIELD_DESCRIPTION),
   })

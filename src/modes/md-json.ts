@@ -15,9 +15,7 @@ import type { ModeHandler } from "./types.js"
  *
  * The model's own answer comes last. JSON appearing earlier may have been
  * copied from the prompt — a source document, a previous turn — and a crafted
- * document could place a fake object there to hijack the parse. Python
- * Instructor's `extract_json_from_codeblock` makes the same choice for the
- * same reason.
+ * document could place a fake object there to hijack the parse.
  *
  * Scans for balanced `{}` / `[]` spans, skipping string contents, and returns
  * the last one that parses. Mirrors Python's `raw_decode` loop, where a value

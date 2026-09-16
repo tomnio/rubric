@@ -3,9 +3,9 @@ import { currentContext } from "./context.js"
 import type { RubricClient } from "./types.js"
 
 /**
- * Verdict shape returned by the judge call. Mirrors the small schema Python
- * Instructor uses so a judge prompt written for one is not surprising in the
- * other.
+ * Verdict shape returned by the judge call. A small, conventional schema: the
+ * model returns whether the candidate value satisfies the rule, why, and a
+ * suggested fix.
  */
 export const Validator = z.object({
   is_valid: z

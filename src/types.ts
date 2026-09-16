@@ -164,6 +164,15 @@ export type WrapOptions = SamplingExtras & {
    * attempts reaches this number, the loop stops instead of retrying.
    */
   tokenBudget?: number
+  /**
+   * Default wall-clock budget for create(), in milliseconds.
+   *
+   * Covers the whole call, retries included — not one request each. When it
+   * elapses the in-flight request is aborted and the call fails with the
+   * `TimeoutError` the signal carries. Combined with a per-call `signal`, the
+   * first of the two to fire wins.
+   */
+  timeout?: number
   hooks?: Hooks
 }
 
@@ -184,6 +193,17 @@ export type CreateParams<T extends z.ZodType> = SamplingExtras & {
    * blind. Not supported by createPartial() / createIterable().
    */
   tokenBudget?: number
+  /**
+   * Wall-clock budget for this call, in milliseconds.
+   *
+   * Covers the whole call, retries included — not one request each. When it
+   * elapses the in-flight request is aborted and the call fails with the
+   * `TimeoutError` the signal carries, rather than a `RetryExhaustedError`:
+   * the loop was cut short, it did not run out of attempts. Combined with
+   * `signal`, whichever fires first wins. Not supported by `createPartial()` /
+   * `createIterable()`, where a deadline has no single moment to report.
+   */
+  timeout?: number
   /**
    * Source text for `cited()` schemas. Quotes must appear in this text.
    * Ignored by schemas that do not use `cited()`.

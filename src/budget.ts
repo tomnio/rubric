@@ -52,6 +52,42 @@ export function assertMaxRetries(
 }
 
 /**
+ * Largest delay `AbortSignal.timeout()` handles correctly.
+ *
+ * Beyond this it does **not** throw: it prints a stderr warning and fires after
+ * 1 ms. A caller who wrote `timeout: 3_000_000_000` would get every call
+ * aborted instantly, so the value is rejected here instead of silently
+ * inverted. 2^31 - 1 ms is about 24.8 days, far past any real call.
+ */
+const MAX_TIMEOUT_MS = 2 ** 31 - 1
+
+/**
+ * Validate a wall-clock timeout before the first provider call.
+ *
+ * Same reasoning as `assertTokenBudget`: a typo must name itself rather than
+ * disable the guardrail after the caller has already paid for a request.
+ */
+export function assertTimeout(
+  timeout: number | undefined,
+): number | undefined {
+  if (timeout === undefined) {
+    return undefined
+  }
+  if (!Number.isInteger(timeout)) {
+    throw new TypeError("timeout must be a positive integer (milliseconds)")
+  }
+  if (timeout <= 0) {
+    throw new RangeError("timeout must be greater than zero")
+  }
+  if (timeout > MAX_TIMEOUT_MS) {
+    throw new RangeError(
+      `timeout must be at most ${MAX_TIMEOUT_MS} ms, because AbortSignal.timeout() silently fires after 1 ms beyond that`,
+    )
+  }
+  return timeout
+}
+
+/**
  * Reject a budget on a streaming call.
  *
  * A stream has no reask to guard, and its usage arrives incrementally, so a
@@ -64,6 +100,23 @@ export function rejectTokenBudgetForStream(
 ): void {
   if (assertTokenBudget(tokenBudget) !== undefined) {
     throw new Error(`tokenBudget is not supported by ${caller}()`)
+  }
+}
+
+/**
+ * Reject a timeout on a streaming call.
+ *
+ * A stream's whole point is to emit before it finishes, so "the deadline
+ * passed" has no single moment to report: aborting mid-stream would either
+ * discard items the caller already received or end the iteration without
+ * saying why. Rejected rather than accepted with undefined semantics.
+ */
+export function rejectTimeoutForStream(
+  timeout: number | undefined,
+  caller: string,
+): void {
+  if (assertTimeout(timeout) !== undefined) {
+    throw new Error(`timeout is not supported by ${caller}()`)
   }
 }
 

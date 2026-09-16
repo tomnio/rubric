@@ -1,6 +1,12 @@
 import type { z } from "zod"
-import { assertMaxRetries, assertTokenBudget, budgetError } from "./budget.js"
+import {
+  assertMaxRetries,
+  assertTimeout,
+  assertTokenBudget,
+  budgetError,
+} from "./budget.js"
 import { runWithContext } from "./context.js"
+import { combineSignal } from "./deadline.js"
 import {
   JsonParseError,
   OutputTruncatedError,
@@ -44,6 +50,12 @@ export async function extract<T extends z.ZodType>(
   const tokenBudget = assertTokenBudget(
     params.tokenBudget ?? defaults?.tokenBudget,
   )
+  // One deadline for the whole call, retries included: every attempt below
+  // reuses this signal, so the budget is not reset by a reask.
+  const signal = combineSignal(
+    params.signal,
+    assertTimeout(params.timeout ?? defaults?.timeout),
+  )
   const hooks: Hooks = { ...defaults?.hooks, ...params.hooks }
   const attemptsAllowed = maxRetries + 1
   const handler = handlerFor(mode)
@@ -74,13 +86,13 @@ export async function extract<T extends z.ZodType>(
       hooks.onRequest,
       [kwargs, meta(attempts, attemptsAllowed,!retriesLeft)],
     )
-    params.signal?.throwIfAborted()
+    signal?.throwIfAborted()
 
     let raw: unknown
     try {
       raw = await client.chatCompletionsCreate(
         kwargs,
-        params.signal ? { signal: params.signal } : undefined,
+        signal ? { signal } : undefined,
       )
     } catch (err) {
       // Provider / SDK failure. Not retried, so this attempt is the last one.

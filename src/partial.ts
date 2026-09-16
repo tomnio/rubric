@@ -1,5 +1,5 @@
 import type { z } from "zod"
-import { rejectTokenBudgetForStream } from "./budget.js"
+import { rejectTimeoutForStream, rejectTokenBudgetForStream } from "./budget.js"
 import { JsonCompleteness } from "./completeness.js"
 import { JsonParseError, OutputTruncatedError } from "./errors.js"
 import { attemptMeta, safeEmit } from "./hooks.js"
@@ -41,6 +41,7 @@ export async function* extractPartial<T extends z.ZodType>(
     params.tokenBudget ?? defaults?.tokenBudget,
     "createPartial",
   )
+  rejectTimeoutForStream(params.timeout ?? defaults?.timeout, "createPartial")
   if (!client.chatCompletionsStream) {
     throw new Error("LLMClient does not implement chatCompletionsStream")
   }

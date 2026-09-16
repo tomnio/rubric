@@ -41,6 +41,7 @@ const user = await client.create({
 | **LLM judge** | `llmRefine("rule", client)` validates a field with a second model call |
 | **Hooks** | `onRequest` / `onError` / `onParseError` / `onSuccess` / `onUsage`, each with attempt metadata |
 | **Token budget** | `tokenBudget` caps cumulative tokens; the loop stops instead of reasking |
+| **Timeout** | `timeout` caps the whole call's wall-clock time, retries included |
 | **Truncation** | A response cut off by `max_tokens` throws `OutputTruncatedError` instead of reasking |
 | **Stream** | `createPartial()` incomplete objects (closed subtrees validated); `createIterable()` complete list items |
 | **Images** | `imageUrl(url)` in `messages[].content` (Anthropic maps these to `image` / `source`) |
@@ -187,6 +188,7 @@ const user = await client.create({
   maxRetries: 3,       // optional, overrides wrap()
   mode: "TOOLS",       // optional
   tokenBudget: 20_000, // optional, cumulative across attempts
+  timeout: 30_000,     // optional, whole call in ms, retries included
   temperature: 0,
   max_tokens: 1024,
   top_p: 1,
@@ -203,6 +205,24 @@ budget blocks the next call, not the answer in hand. If a provider response
 omits usage metadata the budget cannot be measured, so the call fails with
 `TokenUsageUnavailableError` rather than retrying blind. Not supported by
 `createPartial()` / `createIterable()` (streaming has no reask to guard).
+
+`timeout` is a **wall-clock budget for the whole call**, in milliseconds —
+retries included, not one request each. `timeout: 30_000` with `maxRetries: 3`
+means 30 seconds total, not 30 seconds per attempt. When it elapses the
+in-flight request is aborted and the call fails with the signal's
+`TimeoutError` (name it, not a `RetryExhaustedError`: the loop was cut short, it
+did not run out of attempts). It combines with `signal` — whichever fires
+first wins. Unlike `tokenBudget` there is no usage requirement, so it works even
+when the provider reports no token counts. Must be a positive integer, and at
+most `2^31 - 1` ms: past that `AbortSignal.timeout()` does not throw, it warns
+on stderr and fires after 1 ms, so the value is rejected rather than silently
+inverted. Not supported by `createPartial()` / `createIterable()`.
+
+```ts
+await client.create({ model, schema: User, messages, timeout: 30_000 })
+// or set it once for every call:
+wrap(openai, { timeout: 30_000 })
+```
 
 #### Truncated output
 
@@ -459,7 +479,7 @@ chunks[0]      // { index, startIndex, endIndex, value, usage }
 
 `startIndex` / `endIndex` are absolute offsets into the document you passed in, so you can trace any value back to where it came from.
 
-`createDocument()` takes the same options as `create()` (`maxRetries`, `mode`, `temperature`, `max_tokens`, `top_p`, `signal`, `tokenBudget`, `hooks`) plus:
+`createDocument()` takes the same options as `create()` (`maxRetries`, `mode`, `temperature`, `max_tokens`, `top_p`, `signal`, `tokenBudget`, `timeout`, `hooks`) plus:
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -472,7 +492,7 @@ chunks[0]      // { index, startIndex, endIndex, value, usage }
 | `onChunkError` | `"skip"` | `"skip"` records the failure and continues; `"abort"` throws. |
 | `dedupe` | `"overlap"` | How to treat a repeat two chunks reported. See below. |
 
-`tokenBudget` is **per chunk**, not per document (see [Cost](#documents)). `maxRetries` is validated up front, before any chunk runs, so a bad value fails once with `TypeError` / `RangeError` instead of being buried in a per-chunk error.
+`tokenBudget` is **per chunk**, not per document (see [Cost](#documents)). `timeout` is the opposite: one deadline for the **whole document**, started once and shared by every chunk, so `timeout: 30_000` on a 100-chunk document is 30 seconds total rather than 30 seconds each. When it elapses the chunk in flight is aborted and the call throws — like an aborted `signal`, already-extracted chunks are not returned. `maxRetries` is validated up front, before any chunk runs, so a bad value fails once with `TypeError` / `RangeError` instead of being buried in a per-chunk error.
 
 **Per-chunk hooks.** Hooks fire during the call, so they cannot wait for `result.chunks[]`. Every hook's `AttemptMeta` therefore carries a `chunk` descriptor for the chunk that fired it:
 

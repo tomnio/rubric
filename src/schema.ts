@@ -1,4 +1,4 @@
-import { z, type ZodTypeAny } from "zod"
+import type { z, ZodTypeAny } from "zod"
 
 /** JSON Schema subset emitted for LLM tool / json_schema payloads. */
 export type JsonSchema = {
@@ -283,38 +283,6 @@ export function rootKind(schema: ZodTypeAny): RootKind {
 
 function isRootArray(schema: ZodTypeAny): boolean {
   return rootKind(schema) === "array"
-}
-
-/** All object fields optional, recursively. Used to hydrate streaming snapshots. */
-export function deepPartialZod(schema: ZodTypeAny): ZodTypeAny {
-  const { inner } = unwrap(schema)
-  const typeName = def(inner).typeName
-  if (typeName === "ZodObject") {
-    const shape: z.ZodRawShape = {}
-    for (const [key, field] of Object.entries(
-      (inner as z.ZodObject<z.ZodRawShape>).shape,
-    )) {
-      shape[key] = deepPartialZod(field).optional()
-    }
-    return z.object(shape)
-  }
-  if (typeName === "ZodArray") {
-    const element = def(inner).type as ZodTypeAny
-    return z.array(deepPartialZod(element))
-  }
-  if (typeName === "ZodUnion" || typeName === "ZodDiscriminatedUnion") {
-    const options = unionOptions(inner).map((option) => deepPartialZod(option)) as [
-      ZodTypeAny,
-      ZodTypeAny,
-      ...ZodTypeAny[],
-    ]
-    return z.union(options)
-  }
-  if (typeName === "ZodRecord") {
-    const valueType = def(inner).valueType
-    return valueType ? z.record(deepPartialZod(valueType)) : inner
-  }
-  return inner
 }
 
 function convertObject(schema: z.ZodObject<z.ZodRawShape>): JsonSchema {

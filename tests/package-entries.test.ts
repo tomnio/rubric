@@ -28,10 +28,25 @@ const pkg: PkgJson = JSON.parse(
 
 /** Read a built file as CJS would, through the exports map or straight from disk. */
 function requireDist(specifier: string): Record<string, unknown> {
-  if (specifier === ".") {
-    return require(`${repoRoot}dist/index.js`)
+  // Run `pnpm build` first (CI does this before tests). Fail with a hint
+  // instead of a bare MODULE_NOT_FOUND when the dist is missing.
+  try {
+    if (specifier === ".") {
+      return require(`${repoRoot}dist/index.js`)
+    }
+    return require(`${repoRoot}dist/document/index.js`)
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error as NodeJS.ErrnoException).code === "MODULE_NOT_FOUND"
+    ) {
+      throw new Error(
+        "dist/ not found — run `pnpm build` before the test suite " +
+          "(CI builds first for this reason)",
+      )
+    }
+    throw error
   }
-  return require(`${repoRoot}dist/document/index.js`)
 }
 
 describe("package entry points", () => {

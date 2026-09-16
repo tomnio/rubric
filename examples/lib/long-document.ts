@@ -225,14 +225,21 @@ export function generateLongDocument(opts: GenOptions = {}): GeneratedDoc {
   let plantedCursor = 0
   // Interleave: iterate sections; each section emits filler prose, then either
   // a planted transaction (when one is due) or a noise transaction.
-  const noiseSkus: string[] = []
-  for (let i = 0; i < 60; i++) {
-    const sku = `SKU-${String(5000 + Math.floor(rng() * 4900)).padStart(4, "0")}`
-    // Noise must never collide with a planted sku: scoring treats a sku as
-    // recovered when it appears in the output, and a noise duplicate would
-    // hand the extractor free credit (or a spurious conflict).
-    if (plantedSkus.has(sku)) continue
-    noiseSkus.push(sku)
+  // Noise skus are unique and drawn sequentially from a range disjoint from
+  // the planted pool, so every noise sku appears in the document exactly once.
+  // A repeated noise sku would be a genuine duplicate in the output, and the
+  // duplicate-rate metric — which exists to expose windowing double-counts —
+  // would measure the document instead of the extraction.
+  // Noise skus come from a range disjoint from the planted pool (1000-9999).
+  // Each noise line takes the next one, so every noise transaction appears in
+  // the document exactly once and a duplicate in the output can only come from
+  // windowing — which is what the duplicate-rate metric measures.
+  let noiseCursor = 0
+  const nextNoiseSku = (): string => {
+    for (;;) {
+      const sku = `SKU-${9000 + noiseCursor++}`
+      if (!plantedSkus.has(sku)) return sku
+    }
   }
 
   let chars = header.length
@@ -273,8 +280,11 @@ export function generateLongDocument(opts: GenOptions = {}): GeneratedDoc {
         section.push(transactionLine(tx, "first", rng))
         while (planted[plantedCursor]?.kind === "reworded") plantedCursor++
       } else {
+        // A fresh sku per noise line: every noise transaction appears in the
+        // document exactly once, so a duplicate in the output can only come
+        // from windowing — which is what the duplicate-rate metric measures.
         const noise: PlantedTx = {
-          sku: pick(rng, noiseSkus),
+          sku: nextNoiseSku(),
           description: pick(rng, NOUNS),
           amount: Math.round((100 + rng() * 4900) * 100) / 100,
           region: pick(rng, REGIONS),

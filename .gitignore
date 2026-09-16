@@ -1,5 +1,5 @@
-# Internal design specs (local only)
-/docs/
+# Internal design specs (local only); docs/ itself is published
+/docs/local/
 
 # Dependencies and build
 node_modules/

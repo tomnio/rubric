@@ -39,6 +39,20 @@
   },
   "packageManager": "pnpm@10.28.2",
   "license": "MIT",
+  "keywords": [
+    "llm",
+    "structured-output",
+    "zod",
+    "schema",
+    "extraction",
+    "data-extraction",
+    "openai",
+    "anthropic",
+    "gemini",
+    "document-processing",
+    "chunking",
+    "typescript"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tomnio/rubric.git"

@@ -72,6 +72,7 @@ Each of these is implemented, typed, and covered by tests:
 | **Stream** | `createPartial()` incomplete objects (closed subtrees validated); `createIterable()` complete list items |
 | **Images** | `imageUrl(url)` in `messages[].content` (Anthropic maps these to `image` / `source`) |
 | **Documents** | `createDocument()` splits a long text, extracts per chunk, and merges — `@tomnio/rubric/document` |
+| **PDF** | `extractPdfPages()` turns a PDF into per-page text for `createDocument()` — `@tomnio/rubric/pdf`, text layer only (no OCR) |
 
 Truncation, token budget, timeout, and conflict handling are guarantees above, not features to configure. Not included: CLI, batch jobs, or cache. Measured guarantees and the evidence behind them: [docs/benchmarks.md](docs/benchmarks.md).
 
@@ -90,10 +91,11 @@ pnpm add @google/genai
 
 `zod` is required and works with **both Zod 3 (>= 3.24) and Zod 4**. `openai` / `@anthropic-ai/sdk` / `@google/genai` are optional peers.
 
-The `./document` entry point needs one more optional peer — the WASM chunker. It is a separate import, so `create()` does not pull it in:
+The `./document` and `./pdf` entry points need one more optional peer each — the WASM chunker and the PDF text extractor. They are separate imports, so `create()` does not pull them in:
 
 ```bash
 pnpm add @chonkiejs/core   # only for createDocument()
+pnpm add unpdf             # only for extractPdfPages() — pin 1.7.x; 1.8+ needs Node 22
 ```
 
 Runnable examples live in [`examples/`](examples/) (`pnpm example:extract-user`, `pnpm example:extract-document`, and more). Building from a clone: `pnpm install && pnpm typecheck && pnpm test && pnpm build`; release process in [RELEASE.md](RELEASE.md). Live-suite credentials are described under [Testing and reliability](#testing-and-reliability).
@@ -485,6 +487,8 @@ chunks[0]      // { index, startIndex, endIndex, value, usage } — absolute off
 - **Interrupted runs** — timeout / abort / budget cuts throw `DocumentInterruptedError` carrying `partial` (best-effort merge of completed chunks), per-chunk provenance, and usage.
 
 Full option table, merge semantics, dedupe and conflict rules, per-chunk hooks, and every document error type: **[docs/document.md](docs/document.md)**. Measured correctness (100% recall / 0% duplicates at 56 and 151 pages, where the naive call returns nothing past the limit): **[docs/benchmarks.md](docs/benchmarks.md)**.
+
+**Starting from a PDF?** [`extractPdfPages()`](examples/extract-pdf.ts) (`@tomnio/rubric/pdf`) extracts each page's text — pass the joined result as `document`. Text layer only: a scanned page has no text layer and yields an empty string; there is no OCR.
 
 ## Testing and reliability
 

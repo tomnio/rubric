@@ -15,6 +15,11 @@
       "types": "./dist/document/index.d.ts",
       "import": "./dist/document/index.js",
       "require": "./dist/document/index.js"
+    },
+    "./pdf": {
+      "types": "./dist/pdf/index.d.ts",
+      "import": "./dist/pdf/index.js",
+      "require": "./dist/pdf/index.js"
     }
   },
   "files": [
@@ -32,7 +37,8 @@
     "example:extract-user-anthropic": "tsx examples/extract-user-anthropic.ts",
     "example:extract-image-anthropic": "tsx examples/extract-image-anthropic.ts",
     "example:extract-document": "tsx examples/extract-document.ts",
-    "example:extract-long-document": "tsx examples/extract-long-document.ts"
+    "example:extract-long-document": "tsx examples/extract-long-document.ts",
+    "example:extract-pdf": "tsx examples/extract-pdf.ts"
   },
   "engines": {
     "node": ">=20"
@@ -70,6 +76,7 @@
     "@chonkiejs/core": ">=0.0.11",
     "@google/genai": ">=1.0.0",
     "openai": ">=4.0.0",
+    "unpdf": ">=1.7.0 <1.8",
     "zod": "^3.24.0 || ^4.0.0"
   },
   "peerDependenciesMeta": {
@@ -84,6 +91,9 @@
     },
     "openai": {
       "optional": true
+    },
+    "unpdf": {
+      "optional": true
     }
   },
   "devDependencies": {
@@ -92,8 +102,10 @@
     "@google/genai": "^1.0.0",
     "@types/node": "^20.19.43",
     "openai": "^4.104.0",
+    "pdf-lib": "^1.17.1",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3",
+    "unpdf": "1.7.0",
     "vitest": "^3.2.4",
     "zod": "^4.6.5"
   },

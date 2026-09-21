@@ -15,11 +15,11 @@ jobs:
         # supported major so both peer ranges stay covered.
         zod-version: ["4", "3"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
         with:
           version: 10.28.2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: pnpm

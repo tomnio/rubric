@@ -488,11 +488,11 @@ chunks[0]      // { index, startIndex, endIndex, value, usage } — absolute off
 
 Full option table, merge semantics, dedupe and conflict rules, per-chunk hooks, and every document error type: **[docs/document.md](docs/document.md)**. Measured correctness (100% recall / 0% duplicates at 56 and 151 pages, where the naive call returns nothing past the limit): **[docs/benchmarks.md](docs/benchmarks.md)**.
 
-**Starting from a PDF?** [`extractPdfPages()`](examples/extract-pdf.ts) (`@tomnio/rubric/pdf`) extracts each page's text — pass the joined result as `document`. Text layer only: a scanned page has no text layer and yields an empty string; there is no OCR.
+**Starting from a PDF?** [`extractPdfPages()`](examples/extract-pdf.ts) (`@tomnio/rubric/pdf`) extracts each page's text — [`joinPages()`](src/pdf/index.ts) then joins it into one `document` string while recording where each page landed, so any chunk offset `createDocument()` reports can be mapped back to its page. Text layer only: a scanned page has no text layer and yields an empty string; there is no OCR.
 
 ## Testing and reliability
 
-The offline suite runs entirely against fake clients — 399 tests across 44 files, no network, no API key. It covers the retry loop, every mode handler, all document error paths, the merge machinery (including entity-key merging and conflict detection against hand-built outputs), generator determinism, and the package entry-point contract.
+The offline suite runs entirely against fake clients — 410 tests across 42 files, no network, no API key. It covers the retry loop, every mode handler, all document error paths, the merge machinery (including entity-key merging and conflict detection against hand-built outputs), generator determinism, and the package entry-point contract.
 
 CI runs the full suite on a two-version zod matrix (3 and 4) on every push and pull request; releases are tagged, signed, and published by workflow. Everything shipped is on npm as `@tomnio/rubric` ([releases](https://github.com/tomnio/rubric/releases)).
 

@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url"
 import { createRequire } from "node:module"
 import { describe, expect, it } from "vitest"
 import { PDFDocument, StandardFonts } from "pdf-lib"
-import { extractPdfPages } from "../src/pdf/index.js"
+import { extractPdfPages, joinPages } from "../src/pdf/index.js"
 
 const require = createRequire(import.meta.url)
 const repoRoot = fileURLToPath(new URL("..", import.meta.url))
@@ -104,5 +104,70 @@ describe("extractPdfPages", () => {
     expect(readFileSync(`${repoRoot}src/pdf/index.ts`, "utf8")).toMatch(
       /pnpm add unpdf/,
     )
+  })
+})
+
+describe("joinPages", () => {
+  it("records each page's exact span in the joined text", () => {
+    const { text, spans } = joinPages([
+      { number: 1, text: "alpha" },
+      { number: 2, text: "beta" },
+      { number: 3, text: "gamma" },
+    ])
+
+    // Default separator is one blank line between pages.
+    expect(text).toBe("alpha\n\nbeta\n\ngamma")
+    expect(spans).toEqual([
+      { number: 1, startOffset: 0, endOffset: 5 },
+      { number: 2, startOffset: 7, endOffset: 11 },
+      { number: 3, startOffset: 13, endOffset: 18 },
+    ])
+    // Every span slices back to its own page text.
+    for (const [i, span] of spans.entries()) {
+      expect(text.slice(span.startOffset, span.endOffset)).toBe(
+        ["alpha", "beta", "gamma"][i],
+      )
+    }
+  })
+
+  it("keeps offsets pointing inside pages, never at the separator", () => {
+    // The separator belongs to neither span: any offset within a span is
+    // page content. The gaps between spans are exactly the separators.
+    const { text, spans } = joinPages([
+      { number: 1, text: "a" },
+      { number: 2, text: "b" },
+    ], "\n")
+    expect(text).toBe("a\nb")
+    expect(text.slice(spans[0]!.endOffset, spans[1]!.startOffset)).toBe("\n")
+  })
+
+  it("handles empty pages and an empty page list", () => {
+    const empty = joinPages([])
+    expect(empty.text).toBe("")
+    expect(empty.spans).toEqual([])
+
+    const { text, spans } = joinPages([
+      { number: 1, text: "" },
+      { number: 2, text: "only" },
+    ])
+    expect(text).toBe("\n\nonly")
+    expect(spans[0]).toEqual({ number: 1, startOffset: 0, endOffset: 0 })
+    expect(spans[1]).toEqual({ number: 2, startOffset: 2, endOffset: 6 })
+  })
+
+  it("maps a character offset to its page — the createDocument use case", () => {
+    // Simulates tracing a merged value's window back to a page number.
+    const { text, spans } = joinPages([
+      { number: 1, text: "revenue 4,200,000" },
+      { number: 2, text: "sku A1 amount 5" },
+    ])
+    const pageOf = (offset: number) =>
+      spans.find((s) => offset >= s.startOffset && offset < s.endOffset)?.number
+
+    const idx = text.indexOf("A1")
+    expect(text.slice(idx, idx + 2)).toBe("A1")
+    expect(pageOf(idx)).toBe(2)
+    expect(pageOf(text.indexOf("4,200,000"))).toBe(1)
+    expect(pageOf(text.length)).toBeUndefined() // end offset is exclusive
   })
 })

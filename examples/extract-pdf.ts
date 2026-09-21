@@ -13,7 +13,7 @@ import OpenAI from "openai"
 import { z } from "zod"
 import { PDFDocument, StandardFonts } from "pdf-lib"
 import { readFile } from "node:fs/promises"
-import { extractPdfPages } from "../src/pdf/index.ts"
+import { extractPdfPages, joinPages } from "../src/pdf/index.ts"
 import { createDocument } from "../src/document/index.ts"
 
 const Invoice = z.object({
@@ -81,7 +81,10 @@ const { totalPages, pages } = await extractPdfPages(pdfBytes)
 console.log(`Got ${totalPages} page(s).`)
 
 // Join the pages and hand the text to the existing document pipeline.
-const document = pages.map((p) => p.text).join("\n\n")
+// `spans` records where each page landed in the joined text — the same
+// coordinate space `createDocument()` reports chunk offsets in — so any
+// chunk's window can be traced back to its page.
+const { text: document, spans } = joinPages(pages)
 const client = new OpenAI({
   apiKey,
   ...(process.env["OPENAI_BASE_URL"]
@@ -101,3 +104,14 @@ const result = await createDocument(client, {
 console.log("\nMerged, validated result:")
 console.log(JSON.stringify(result.data, null, 2))
 console.log(`\n${result.chunks.length} chunk(s), ${result.usage.totalTokens} tokens`)
+
+// Page provenance: map each chunk's character window back to its page(s).
+const pageOf = (offset: number) =>
+  spans.find((s) => offset >= s.startOffset && offset < s.endOffset)?.number
+for (const chunk of result.chunks) {
+  const first = pageOf(chunk.startIndex) ?? "?"
+  const last = pageOf(Math.max(0, chunk.endIndex - 1)) ?? "?"
+  console.log(
+    `chunk [${chunk.startIndex}, ${chunk.endIndex}) → page(s) ${first}-${last}`,
+  )
+}

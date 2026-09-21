@@ -73,3 +73,59 @@ export async function extractPdfPages(
     pages: pageTexts.map((text, i) => ({ number: i + 1, text })),
   }
 }
+
+/** A page's span within the text produced by `joinPages`. */
+export type PageSpan = {
+  /** 1-based page number, matching the source `PdfPage`. */
+  number: number
+  /** Inclusive start offset of this page's text in the joined string. */
+  startOffset: number
+  /** Exclusive end offset of this page's text in the joined string. */
+  endOffset: number
+}
+
+export type JoinedPages = {
+  /** The text to pass as `createDocument()`'s `document`. */
+  text: string
+  /**
+   * Each page's span within `text`, in page order. Offsets are absolute
+   * into `text`, the same coordinate space `createDocument()` reports in
+   * its per-chunk `startIndex` / `endIndex` and conflict entries — so a
+   * merged value's window can be mapped back to the page it came from.
+   */
+  spans: PageSpan[]
+}
+
+/**
+ * Join per-page text into one document string, recording where each page
+ * landed. `createDocument()` traces values to character offsets in the text
+ * it was given; `spans` is what turns those offsets into page numbers:
+ *
+ * ```ts
+ * const { text, spans } = joinPages(pages)
+ * const { chunks } = await createDocument(client, { document: text, ... })
+ * const pageOf = (offset: number) =>
+ *   spans.find((s) => offset >= s.startOffset && offset < s.endOffset)?.number
+ * ```
+ */
+export function joinPages(
+  pages: PdfPage[],
+  separator = "\n\n",
+): JoinedPages {
+  const spans: PageSpan[] = []
+  let cursor = 0
+  let text = ""
+  for (const [i, page] of pages.entries()) {
+    if (i > 0) {
+      // The separator sits between pages and belongs to neither span, so
+      // an offset that falls inside a span is unambiguously inside a page.
+      text += separator
+      cursor += separator.length
+    }
+    const startOffset = cursor
+    text += page.text
+    cursor += page.text.length
+    spans.push({ number: page.number, startOffset, endOffset: cursor })
+  }
+  return { text, spans }
+}

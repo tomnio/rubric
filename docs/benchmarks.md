@@ -65,6 +65,12 @@ validation is scored as what it returned.
 Model: `gpt-5.6-luna` via an OpenAI-compatible gateway, MD_JSON mode.
 Run date: 2026-09-16.
 
+> `gpt-5.6-luna` is the gateway's name for the served model. What matters for
+> this study is that both approaches used the same model, same mode, and same
+> schema — the comparison is between pipelines, not models. Substitute any
+> model via `OPENAI_MODEL`; the pipeline behavior (chunking, merge, truncation
+> detection) is model-independent.
+
 ### 56 pages — inside the context window
 
 ```

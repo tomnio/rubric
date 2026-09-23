@@ -7,7 +7,7 @@
 
 Schema-first structured extraction from LLMs. You define a Zod schema. Rubric puts that schema on the request, pulls JSON out of the reply, validates it, and **reasks** with the error until the value conforms — or retries run out. For documents longer than the context window, `createDocument()` splits the text, extracts per chunk, and merges — measured to recover **100% of planted entities at a 0% duplicate rate** where a single call over the same document returns nothing ([benchmarks](docs/benchmarks.md)).
 
-[Releases](https://github.com/tomnio/rubric/releases) · [CHANGELOG](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
+[Releases](https://github.com/tomnio/rubric/releases) · [CHANGELOG](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Architecture](docs/architecture.md)
 
 ```ts
 import OpenAI from "openai"

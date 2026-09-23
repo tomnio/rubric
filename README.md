@@ -5,9 +5,9 @@
 ![Node](https://img.shields.io/badge/node-20%2B-brightgreen)
 ![zod](https://img.shields.io/badge/zod-3%20%7C%204-blue)
 
-Schema-first structured extraction from LLMs.
+Schema-first structured extraction from LLMs. You define a Zod schema. Rubric puts that schema on the request, pulls JSON out of the reply, validates it, and **reasks** with the error until the value conforms — or retries run out. For documents longer than the context window, `createDocument()` splits the text, extracts per chunk, and merges — measured to recover **100% of planted entities at a 0% duplicate rate** where a single call over the same document returns nothing ([benchmarks](docs/benchmarks.md)).
 
-You define a Zod schema. Rubric puts that schema on the request, pulls JSON out of the reply, validates it, and **reasks** with the error until the value conforms — or retries run out. For documents longer than the context window, `createDocument()` splits the text, extracts per chunk, and merges — measured to recover **100% of planted entities at a 0% duplicate rate** where a single call over the same document returns nothing ([benchmarks](docs/benchmarks.md)).
+[Releases](https://github.com/tomnio/rubric/releases) · [CHANGELOG](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
 
 ```ts
 import OpenAI from "openai"
@@ -38,6 +38,14 @@ Getting structured data out of an LLM has three failure layers, and most tooling
 1. **One call can't be trusted.** Models miss schema fields, drift on formats, invent values. Rubric closes this loop: schema on the request, validation on the reply, reask with the error — so `create()` returns `z.infer<typeof schema>` or a typed error, never a guess.
 2. **Real documents don't fit in the prompt.** Contracts, filings, and reports run past the context window. A single call truncates silently or dies on the output limit. `createDocument()` chunks the text, extracts per chunk, and merges — with the machinery that makes chunking lossless: overlap-aware dedupe, entity-key merging (`dedupeBy`) for items that cross chunk boundaries, conflict detection (`onConflict`) for fields the document states differently in different places, and partial results on interruption so paid-for chunks come back even when the run is cut short.
 3. **You have to trust the pipeline itself.** A chunk-and-merge layer is easy to doubt: does it drop data? double it? Silently pick one side of a contradiction? Rubric answers with measurement — a seeded generator plants exactly-known entities (including adversarial pairs split across chunk boundaries and a planted scalar conflict), and the scored runs show 100% recall and 0% duplicates at 56 and 151 pages, where the naive call collapses to 0% past the limit. See [docs/benchmarks.md](docs/benchmarks.md).
+
+## Why not the alternatives
+
+- **Provider-native structured output** (OpenAI JSON mode / strict schema, Anthropic tool use, Gemini responseSchema) puts the schema on the request — that is layer 1 solved at the wire level. But there is no retry loop: a reply that misses the schema is your error to handle. There is also no document story: a contract past the context window is still your problem. Rubric wraps those same wire formats (that is what the modes are) and closes the loop around them.
+- **Python Instructor** (and ports of it) owns the reask loop. Rubric takes the same idea, in TypeScript with Zod, and adds the part none of them have: the document pipeline — chunking, overlap-aware dedupe, entity-key merging, conflict detection, partial results on interruption, per-chunk provenance — with a measured no-loss claim rather than a hoped-for one.
+- **Framework extraction chains** (LangChain-style parsers, or a RAG pipeline) handle long inputs by retrieving *relevant* pieces and answering from those. That is a different product: it optimizes for a good-enough answer, and it can silently miss the pieces it never retrieved. Rubric does not retrieve — it processes every character, so "the model never saw it" is not a failure mode it can have. For single-document extraction, exhaustive beats selective.
+
+The short version: if your input fits in one prompt and one try always works, you do not need this library. The gap starts where provider-native output ends.
 
 ## Guarantees
 

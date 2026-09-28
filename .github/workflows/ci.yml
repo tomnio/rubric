@@ -31,4 +31,9 @@ jobs:
       # require(esm) and cannot run against a missing build.
       - run: pnpm build
       - run: pnpm typecheck
-      - run: pnpm test
+      - run: pnpm test --coverage
+      # Both matrix legs upload; Coveralls merges them into one number.
+      - uses: coverallsapp/github-action@v2
+        with:
+          files: coverage/coverage-summary.json
+          fail-on-error: false

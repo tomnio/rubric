@@ -2,6 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/@tomnio/rubric)](https://www.npmjs.com/package/@tomnio/rubric)
 [![CI](https://github.com/tomnio/rubric/actions/workflows/ci.yml/badge.svg)](https://github.com/tomnio/rubric/actions/workflows/ci.yml)
+[![Coverage](https://coveralls.io/repos/github/tomnio/rubric/badge.svg?branch=main)](https://coveralls.io/github/tomnio/rubric?branch=main)
 ![Node](https://img.shields.io/badge/node-20%2B-brightgreen)
 ![zod](https://img.shields.io/badge/zod-3%20%7C%204-blue)
 
